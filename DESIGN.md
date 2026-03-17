@@ -1,49 +1,35 @@
-# Design Document - HW1: Chat Client
+# Design Document - HW2
 
 ## Overview
 
-This project implements a modular chat client system using interface-implementation separation and dependency injection.
+The project keeps a single `ChatClient` interface while supporting two execution modes:
 
-## Architecture
+- direct local execution through `slack_client_impl`
+- remote execution through `chat_client_service` plus `chat_client_adapter`
 
-### Components
+The HW2 change is the service boundary. The consumer code still talks to `ChatClient`; only the injected implementation changes.
 
-1. **chat_client_api** (Interface)
-   - Abstract base class defining chat operations
-   - Methods: send_message, list_channels, get_messages
-   - Dependency injection factory: get_client(), register_client()
+## Component Roles
 
-2. **slack_client_impl** (Implementation)
-   - Concrete Slack implementation
-   - Inherits from ChatClient ABC
-   - Auto-registers via dependency injection on import
+1. `chat_client_api`
+   Defines DTOs and the abstract interface.
+2. `slack_client_impl`
+   Talks directly to Slack when a bot token is available.
+3. `chat_client_service`
+   Exposes the contract over FastAPI and manages Slack OAuth plus remote session state.
+4. `chat_client_service_api_client`
+   Is generated from the service OpenAPI schema and provides typed HTTP calls.
+5. `chat_client_adapter`
+   Wraps the generated client and re-exposes the original `ChatClient` interface.
 
-### Design Decisions
+## Key Decisions
 
-**Why separate interface from implementation?**
-- Allows swapping chat providers (Slack, Discord, Teams) without changing client code
-- Easier testing with mocks
-- Clear contracts
+- OAuth state is handled by the FastAPI service, not the adapter. The adapter only starts auth, opens the browser, and polls service session status.
+- The service stores authenticated Slack tokens in in-memory session records keyed by service session IDs. This keeps the homework architecture small while still supporting a browser-based OAuth flow.
+- The generated client is excluded from the handwritten-code lint/type/coverage rules in the root config. Handwritten code still passes strict `ruff`, `mypy`, and coverage gates.
+- The adapter lazily authenticates. If no `CHAT_CLIENT_SERVICE_SESSION_ID` exists, the first remote operation triggers the auth flow automatically.
 
-**Why dependency injection?**
-- Loose coupling between interface and implementation
-- Users code against interface, not concrete class
-- Easy to swap implementations
+## Tradeoffs
 
-**Why ABC (Abstract Base Class)?**
-- Enforces contract at Python level
-- Type checking with mypy
-- Clear documentation of required methods
-
-## Current Status (HW1)
-
-- Interface: Complete
-- Implementation: Scaffold (methods raise NotImplementedError)
-- Tests: Basic integration test for DI
-
-## Future Work
-
-- Implement actual Slack SDK calls
-- Add OAuth authentication flow
-- Comprehensive unit tests
-- E2E tests with real Slack workspace
+- In-memory service sessions are simple and match the homework scope, but they are not durable across process restarts.
+- The remote adapter preserves the original business interface, but OAuth bootstrap is still an unavoidable side effect when a remote session does not already exist.

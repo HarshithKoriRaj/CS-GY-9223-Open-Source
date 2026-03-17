@@ -209,3 +209,10 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local dev SSL certs
+localhost.crt
+localhost.key
+
+# ngrok binary
+ngrok.exe

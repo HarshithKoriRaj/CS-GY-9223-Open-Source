@@ -2,52 +2,38 @@
 
 ## Setup
 
-1. Install uv:
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-2. Clone and setup:
-```bash
 git clone https://github.com/sq6111/CS-GY-9223-Open-Source
 cd CS-GY-9223-Open-Source
-uv sync
+uv sync --all-packages
 ```
 
-## Development Workflow
+## Workflow
 
-1. Create a branch:
-```bash
-git checkout -b feature/my-feature
-```
+- Branch from `Hw2` for HW2 work.
+- Keep commit history small and reviewable before opening the PR.
+- Regenerate `chat_client_service_api_client` whenever the FastAPI OpenAPI contract changes.
 
-2. Make changes
+## Required Checks
 
-3. Run checks:
 ```bash
 uv run ruff check .
 uv run mypy .
-uv run pytest
+uv run pytest --cov=components --cov-report=term-missing
+uv run mkdocs build --strict
 ```
 
-4. Commit and push:
+## Generated Client Regeneration
+
 ```bash
-git add .
-git commit -m "Add feature"
-git push origin feature/my-feature
+uv run python -c "from chat_client_service.main import app; import json, pathlib; pathlib.Path('openapi-chat-client-service.json').write_text(json.dumps(app.openapi(), indent=2), encoding='utf-8')"
+uv run openapi-python-client generate --path openapi-chat-client-service.json --config openapi-python-client-config.yml --meta uv --output-path components/chat_client_service_api_client --overwrite
 ```
 
-5. Create PR on GitHub
+## Quality Expectations
 
-## Code Quality
-
-- All code must pass ruff and mypy strict checks
-- Test coverage must be >= 80%
-- Use absolute imports only
-- Follow type hints
-
-## Testing
-
-- Unit tests: Test individual components with mocks
-- Integration tests: Test dependency injection
-- E2E tests: Test against real APIs (with test credentials)
+- `mypy` runs in strict mode.
+- `ruff` must pass on handwritten code.
+- Coverage must stay at or above the `90%` threshold in the root `pyproject.toml`.
+- Component READMEs and mkdocs pages must be updated with code changes.

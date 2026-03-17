@@ -1,53 +1,28 @@
-# Contributing Guide
+# Contributing
 
 ## Setup
 
-1. Install uv:
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync --all-packages
 ```
 
-2. Clone and setup:
-```bash
-git clone https://github.com/sq6111/CS-GY-9223-Open-Source
-cd CS-GY-9223-Open-Source
-uv sync
-```
+## Checks
 
-## Development Workflow
-
-1. Create a branch:
-```bash
-git checkout -b feature/my-feature
-```
-
-2. Make changes
-
-3. Run checks:
 ```bash
 uv run ruff check .
 uv run mypy .
-uv run pytest
+uv run pytest --cov=components --cov-report=term-missing
+uv run mkdocs build --strict
 ```
 
-4. Commit and push:
-```bash
-git add .
-git commit -m "Add feature"
-git push origin feature/my-feature
-```
+## Generated Client
 
-5. Create PR on GitHub
+Regenerate `chat_client_service_api_client` whenever the FastAPI OpenAPI schema changes.
 
-## Code Quality
+## Documentation
 
-- All code must pass ruff and mypy strict checks
-- Test coverage must be >= 80%
-- Use absolute imports only
-- Follow type hints
+Update:
 
-## Testing
-
-- Unit tests: Test individual components with mocks
-- Integration tests: Test dependency injection
-- E2E tests: Test against real APIs (with test credentials)
+- the root `README.md`
+- the component README for each changed package
+- the mkdocs pages under `docs/`

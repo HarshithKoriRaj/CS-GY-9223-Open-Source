@@ -1,5 +1,5 @@
-site_name: OSPSD Team 9 - Chat Client
-site_description: HW1 Chat Client with Slack Implementation
+site_name: OSPSD Team 9 - Chat Client Service
+site_description: HW2 Slack-backed chat client with FastAPI service and adapter
 
 theme:
   name: material
@@ -7,8 +7,12 @@ theme:
 nav:
   - Home: index.md
   - Architecture: architecture.md
+  - Design: design.md
+  - HW2 Traceability: hw2_traceability.md
   - Components:
       - Chat Client API: components/chat_client_api.md
-      - Slack Implementation: components/slack_client_impl.md
+      - Slack Client Implementation: components/slack_client_impl.md
+      - Chat Client Service: components/chat_client_service.md
+      - Service API Client: components/chat_client_service_api_client.md
+      - Chat Client Adapter: components/chat_client_adapter.md
   - Contributing: contributing.md
-  - Design: design.md

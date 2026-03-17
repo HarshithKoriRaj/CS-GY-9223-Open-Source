@@ -97,15 +97,17 @@ class SlackClient(ChatClient):
 
         """
         try:
-            kwargs: dict[str, str | int] = {
-                "channel": channel,
-                "limit": limit,
-            }
             if cursor:
-                kwargs["cursor"] = cursor
-            response = self.client.conversations_history(
-                **kwargs,  # type: ignore[arg-type]
-            )
+                response = self.client.conversations_history(
+                    channel=channel,
+                    limit=limit,
+                    cursor=cursor,
+                )
+            else:
+                response = self.client.conversations_history(
+                    channel=channel,
+                    limit=limit,
+                )
             return [
                 Message(
                     message_id=str(msg.get("ts", "")),
