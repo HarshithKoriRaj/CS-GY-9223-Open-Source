@@ -2,6 +2,11 @@
 name = "ospsd-team9-hw2"
 version = "0.2.0"
 requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.135.1",
+    "slack-sdk>=3.40.0",
+    "uvicorn>=0.42.0",
+]
 
 [dependency-groups]
 dev = [
