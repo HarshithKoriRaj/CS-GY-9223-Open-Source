@@ -78,27 +78,22 @@ uv run openapi-python-client generate --path openapi-chat-client-service.json --
 
 ## Deployment
 
-The Chat Client Service is deployed as a public FastAPI web service using Render.
+The Chat Client Service is deployed as a public FastAPI web service on **Render**.
 
 ### Live Service
 
-- Base URL: https://os-bmaq.onrender.com  
-- OpenAPI Spec: https://os-bmaq.onrender.com/openapi.json  
-- Swagger Docs: https://os-bmaq.onrender.com/docs  
+- Base URL: https://os-bmaq.onrender.com
+- OpenAPI Spec: https://os-bmaq.onrender.com/openapi.json
+- Swagger Docs: https://os-bmaq.onrender.com/docs
+- Health Check: https://os-bmaq.onrender.com/health
 
-### Deployment Configuration
+### Platform Configuration
 
-- Platform: Render (Web Service)  
-- Branch: Hw2  
-- Root Directory: components/chat_client_service  
+- Platform: Render (Web Service)
+- Branch: `Hw2`
+- Root Directory: `components/chat_client_service`
 
-Build command used:
-
-```bash
-pip install -r requirements.txt || pip install fastapi uvicorn slack-sdk httpx
-```
-
-Start command used:
+Start command:
 
 ```bash
 PYTHONPATH=src:../chat_client_api/src:../slack_client_impl/src:../chat_client_adapter/src:../chat_client_service_api_client/src uvicorn chat_client_service.main:app --host 0.0.0.0 --port $PORT
@@ -106,15 +101,35 @@ PYTHONPATH=src:../chat_client_api/src:../slack_client_impl/src:../chat_client_ad
 
 ### Environment Variables
 
-- SLACK_CLIENT_ID  
-- SLACK_CLIENT_SECRET  
-- SLACK_REDIRECT_URI  
-- SLACK_SCOPES (optional)  
-- CHAT_CLIENT_SERVICE_BASE_URL  
+All secrets are stored in Render's Environment tab — none are committed to source control.
 
-### Result
+| Variable | Required | Description |
+|---|---|---|
+| `SLACK_CLIENT_ID` | yes | Slack App client ID (OAuth & Permissions page) |
+| `SLACK_CLIENT_SECRET` | yes | Slack App client secret |
+| `SLACK_REDIRECT_URI` | yes | Must exactly match the redirect URL in Slack App settings (`https://os-bmaq.onrender.com/auth/callback`) |
+| `CHAT_CLIENT_SERVICE_BASE_URL` | yes | `https://os-bmaq.onrender.com` |
+| `SLACK_SCOPES` | no | Defaults to `chat:write,channels:read,channels:history` |
 
-- The service is successfully deployed and publicly accessible  
-- All endpoints are available via Swagger UI  
-- OpenAPI schema is generated for client usage  
-- The adapter works with the deployed service without any changes  
+### CI/CD Pipeline
+
+CircleCI is configured in [.circleci/config.yml](.circleci/config.yml). Every push to `Hw2` triggers:
+
+1. `uv sync --all-packages`
+2. `ruff check .`
+3. `mypy .`
+4. `pytest --cov=components` — fails if coverage drops below 90%
+
+To wire automatic deployment, add a `deploy` job that calls the Render deploy hook after a green build:
+
+```yaml
+deploy:
+  docker:
+    - image: cimg/base:stable
+  steps:
+    - run:
+        name: Trigger Render deploy
+        command: curl -X POST "$RENDER_DEPLOY_HOOK_URL"
+```
+
+Store `RENDER_DEPLOY_HOOK_URL` as a CircleCI environment variable and add `requires: [test]` to the workflow.

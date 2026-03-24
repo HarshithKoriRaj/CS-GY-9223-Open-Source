@@ -164,12 +164,14 @@ source = { editable = "components/chat_client_adapter" }
 dependencies = [
     { name = "chat-client-api" },
     { name = "chat-client-service-api-client" },
+    { name = "httpx" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "chat-client-api", editable = "components/chat_client_api" },
     { name = "chat-client-service-api-client", editable = "components/chat_client_service_api_client" },
+    { name = "httpx", specifier = ">=0.23.0" },
 ]
 
 [[package]]
