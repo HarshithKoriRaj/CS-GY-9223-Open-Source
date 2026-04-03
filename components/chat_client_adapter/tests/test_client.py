@@ -159,10 +159,9 @@ def test_send_message_triggers_lazy_authentication() -> None:
     with (
         mock.patch("chat_client_adapter.client.time.sleep", return_value=None),
         mock.patch("chat_client_adapter.client.webbrowser.open") as mock_open,
-        mock.patch.dict(os.environ, {}, clear=False),
     ):
         response = adapter.send_message("C001", "Hello from adapter")
-        assert os.environ["CHAT_CLIENT_SERVICE_SESSION_ID"] == "session-123"
+        assert adapter.session_id == "session-123"
 
     assert response.ok is True
     assert gateway.create_calls == 1

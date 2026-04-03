@@ -5,22 +5,28 @@ from __future__ import annotations
 import os
 import secrets
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 from urllib.parse import urlencode
 
 import httpx
-from chat_client_api.client import ChatClient
+import slack_client_impl  # noqa: F401
+from chat_client_api.client import ChatClient, get_client
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
-from slack_client_impl.client import SlackClient
 
-if TYPE_CHECKING:
-    from chat_client_api.client import (
-        Channel,
-        Message,
-        SendMessageResponse,
-    )
+from chat_client_service.models import (
+    AuthCallbackResponse,
+    AuthSessionResponse,
+    AuthSessionStatusResponse,
+    ChannelModel,
+    GetMessagesResponse,
+    HealthResponse,
+    ListChannelsResponse,
+    LogoutResponse,
+    MessageModel,
+    SendMessageRequest,
+    SendMessageResponseModel,
+)
 
 
 @dataclass(frozen=True)
@@ -123,118 +129,6 @@ class InMemoryAuthSessionStore:
         self._oauth_state_to_session_id.clear()
 
 
-class HealthResponse(BaseModel):
-    """Health check response model."""
-
-    status: str
-
-
-class AuthSessionResponse(BaseModel):
-    """Created auth session response model."""
-
-    session_id: str
-    authenticated: bool
-    login_url: str
-    status_url: str
-
-
-class AuthSessionStatusResponse(BaseModel):
-    """Auth session status response model."""
-
-    session_id: str
-    authenticated: bool
-    team_name: str | None = None
-
-
-class AuthCallbackResponse(BaseModel):
-    """OAuth callback completion response model."""
-
-    status: str
-    message: str
-
-
-class LogoutResponse(BaseModel):
-    """Auth session deletion response model."""
-
-    status: str
-
-
-class ChannelModel(BaseModel):
-    """Serialized channel response model."""
-
-    channel_id: str
-    name: str
-    is_private: bool
-
-    @classmethod
-    def from_dto(cls, channel: Channel) -> ChannelModel:
-        """Convert a channel DTO into an API response model."""
-        return cls(
-            channel_id=channel.channel_id,
-            name=channel.name,
-            is_private=channel.is_private,
-        )
-
-
-class ListChannelsResponse(BaseModel):
-    """List channels response model."""
-
-    channels: list[ChannelModel]
-
-
-class SendMessageRequest(BaseModel):
-    """Send message request model."""
-
-    channel: str = Field(min_length=1)
-    text: str = Field(min_length=1)
-
-
-class SendMessageResponseModel(BaseModel):
-    """Send message response model."""
-
-    message_id: str
-    channel: str
-    timestamp: str
-    ok: bool
-
-    @classmethod
-    def from_dto(cls, response: SendMessageResponse) -> SendMessageResponseModel:
-        """Convert a send-message DTO into an API response model."""
-        return cls(
-            message_id=response.message_id,
-            channel=response.channel,
-            timestamp=response.timestamp,
-            ok=response.ok,
-        )
-
-
-class MessageModel(BaseModel):
-    """Serialized chat message response model."""
-
-    message_id: str
-    channel: str
-    text: str
-    sender: str
-    timestamp: str
-
-    @classmethod
-    def from_dto(cls, message: Message) -> MessageModel:
-        """Convert a message DTO into an API response model."""
-        return cls(
-            message_id=message.message_id,
-            channel=message.channel,
-            text=message.text,
-            sender=message.sender,
-            timestamp=message.timestamp,
-        )
-
-
-class GetMessagesResponse(BaseModel):
-    """Get messages response model."""
-
-    messages: list[MessageModel]
-
-
 app = FastAPI(
     title="Chat Client Service",
     description="Slack-backed chat client service with OAuth session tokens.",
@@ -266,7 +160,8 @@ def get_settings() -> ServiceSettings:
 
 def build_chat_client(slack_bot_token: str) -> ChatClient:
     """Create the concrete Slack-backed chat client."""
-    return SlackClient(slack_bot_token)
+    os.environ["SLACK_BOT_TOKEN"] = slack_bot_token
+    return get_client()
 
 
 def reset_service_state() -> None:
@@ -292,7 +187,6 @@ def _build_slack_authorization_url(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="SLACK_CLIENT_ID environment variable must be set.",
         )
-
     params = {
         "client_id": client_id,
         "scope": settings.slack_scopes,
@@ -311,7 +205,6 @@ def _exchange_slack_code_for_token(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="SLACK_CLIENT_ID and SLACK_CLIENT_SECRET must be set.",
         )
-
     try:
         with httpx.Client(timeout=20) as client:
             response = client.post(
@@ -329,7 +222,6 @@ def _exchange_slack_code_for_token(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Slack token exchange request failed: {exc}",
         ) from exc
-
     payload = response.json()
     if not isinstance(payload, dict):
         raise HTTPException(
@@ -343,7 +235,6 @@ def _extract_team_name(payload: dict[str, object]) -> str | None:
     team_payload = payload.get("team")
     if not isinstance(team_payload, dict):
         return None
-
     name = team_payload.get("name")
     if isinstance(name, str) and name:
         return name
@@ -433,14 +324,12 @@ def auth_callback(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No state provided.",
         )
-
     pending_session = _session_store.pop_session_for_state(state)
     if pending_session is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired OAuth state.",
         )
-
     payload = _exchange_slack_code_for_token(code=code, settings=get_settings())
     if payload.get("ok") is not True:
         oauth_error = payload.get("error", "unknown_error")
@@ -448,14 +337,12 @@ def auth_callback(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Slack token exchange failed: {oauth_error}",
         )
-
     slack_bot_token = payload.get("access_token")
     if not isinstance(slack_bot_token, str) or not slack_bot_token:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Slack response missing access_token.",
         )
-
     _session_store.authenticate_session(
         session_id=pending_session.session_id,
         slack_bot_token=slack_bot_token,

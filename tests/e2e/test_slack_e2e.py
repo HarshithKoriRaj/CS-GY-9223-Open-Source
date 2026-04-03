@@ -6,8 +6,7 @@ import os
 
 import httpx
 import pytest
-from chat_client_api.client import Channel, Message
-from slack_client_impl.client import SlackClient
+from chat_client_api.client import Channel, Message, _ClientRegistry
 
 LIVE_SERVICE_URL = os.getenv("CHAT_CLIENT_SERVICE_BASE_URL", "https://os-bmaq.onrender.com")
 
@@ -15,6 +14,11 @@ HTTP_200_OK = 200
 HTTP_201_CREATED = 201
 HTTP_401_UNAUTHORIZED = 401
 HTTP_404_NOT_FOUND = 404
+
+
+def setup_function() -> None:
+    """Reset registry before each test."""
+    _ClientRegistry._factory = None
 
 
 class TestLiveServiceEndpoints:
@@ -80,18 +84,57 @@ class TestLiveServiceEndpoints:
         assert response.status_code == HTTP_401_UNAUTHORIZED
 
 
-class TestSlackClientE2E:
-    """Tests against the real Slack API using the local slack_client_impl.
+class TestSameConsumerCodeBothBackends:
+    """Demonstrates same consumer code works with both local and remote backends.
 
-    Requires SLACK_BOT_TOKEN to be set in the environment. All tests in this
-    class are skipped automatically when the token is absent.
+    This is the key architectural property of the system — the consumer
+    always codes against ChatClient, never against a concrete implementation.
     """
+
+    def test_local_backend_via_di(self) -> None:
+        """Local backend should work through the abstract ChatClient interface."""
+        token = os.getenv("SLACK_BOT_TOKEN")
+        if not token:
+            pytest.skip("SLACK_BOT_TOKEN not set")
+
+        import slack_client_impl  # noqa: F401
+        from chat_client_api import get_client
+
+        # Consumer code — same regardless of backend
+        client = get_client()
+        channels = client.list_channels()
+        assert isinstance(channels, list)
+        assert all(isinstance(c, Channel) for c in channels)
+
+    def test_remote_backend_via_di(self) -> None:
+        """Remote backend should work through the abstract ChatClient interface."""
+        session_id = os.getenv("CHAT_CLIENT_SERVICE_SESSION_ID")
+        base_url = os.getenv("CHAT_CLIENT_SERVICE_BASE_URL")
+        if not session_id or not base_url:
+            pytest.skip(
+                "CHAT_CLIENT_SERVICE_SESSION_ID and "
+                "CHAT_CLIENT_SERVICE_BASE_URL must both be set",
+            )
+
+        import chat_client_adapter  # noqa: F401
+        from chat_client_api import get_client
+
+        # Consumer code — identical to local backend test above!
+        client = get_client()
+        channels = client.list_channels()
+        assert isinstance(channels, list)
+        assert all(isinstance(c, Channel) for c in channels)
+
+
+class TestSlackClientE2E:
+    """Tests against the real Slack API using the local slack_client_impl."""
 
     def test_list_channels_returns_channel_objects(self) -> None:
         """list_channels should return a list of Channel dataclass instances."""
         token = os.getenv("SLACK_BOT_TOKEN")
         if not token:
             pytest.skip("SLACK_BOT_TOKEN not set")
+        from slack_client_impl.client import SlackClient
         slack = SlackClient(token)
         channels = slack.list_channels()
         assert isinstance(channels, list)
@@ -103,6 +146,7 @@ class TestSlackClientE2E:
         channel = os.getenv("SLACK_TEST_CHANNEL")
         if not token or not channel:
             pytest.skip("SLACK_BOT_TOKEN and SLACK_TEST_CHANNEL must both be set")
+        from slack_client_impl.client import SlackClient
         slack = SlackClient(token)
         messages = slack.get_messages(channel, limit=5)
         assert isinstance(messages, list)
@@ -114,6 +158,7 @@ class TestSlackClientE2E:
         channel = os.getenv("SLACK_TEST_CHANNEL")
         if not token or not channel:
             pytest.skip("SLACK_BOT_TOKEN and SLACK_TEST_CHANNEL must both be set")
+        from slack_client_impl.client import SlackClient
         slack = SlackClient(token)
         result = slack.send_message(channel, "E2E test from pytest")
         assert result.ok is True

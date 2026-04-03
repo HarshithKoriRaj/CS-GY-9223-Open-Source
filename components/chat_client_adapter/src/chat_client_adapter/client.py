@@ -268,12 +268,12 @@ class ChatClientServiceAdapter(ChatClient):
         while time.monotonic() < deadline:
             status_response = self.gateway.get_auth_session_status(session_id)
             if status_response.authenticated:
-                os.environ["CHAT_CLIENT_SERVICE_SESSION_ID"] = session_id
+                self.session_id = session_id
                 return session_id
             time.sleep(self.auth_config.poll_interval_seconds)
 
         msg = (
-            "Slack OAuth did not complete before the configured timeout expired. "
+            "OAuth did not complete before the configured timeout expired. "
             "Open the login URL again and retry."
         )
         raise ChatClientAuthenticationTimeoutError(msg)
@@ -291,7 +291,6 @@ class ChatClientServiceAdapter(ChatClient):
             return
         self.gateway.delete_auth_session(self.session_id)
         self.session_id = None
-        os.environ.pop("CHAT_CLIENT_SERVICE_SESSION_ID", None)
 
     def send_message(self, channel: str, text: str) -> SendMessageResponse:
         """Send a message via the remote chat client service."""
