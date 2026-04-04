@@ -1,41 +1,38 @@
 # Chat Client API
 
-Abstract interface for chat client implementations.
+This package defines the stable interface shared by the local Slack implementation and the remote service adapter.
 
-## Overview
+## Contract
 
-This package provides an abstract base class (`ChatClient`) that defines the interface for chat client implementations.
+- `send_message(channel, text) -> SendMessageResponse`
+- `list_channels() -> list[Channel]`
+- `get_messages(channel, limit=10, cursor=None) -> list[Message]`
 
-## Usage
+## Dependency Injection
+
+Importing an implementation package registers a factory:
+
 ```python
 from chat_client_api import get_client
 
-# Get the registered client
+import slack_client_impl
+
 client = get_client()
-
-# Send a message
-response = client.send_message("general", "Hello, world!")
-
-# List channels
-channels = client.list_channels()
-
-# Get messages with pagination
-messages = client.get_messages("general", limit=20)
-
-# Get next page of messages using cursor
-next_messages = client.get_messages("general", limit=20, cursor="next-cursor-here")
 ```
 
-## Interface Methods
+The same pattern works with the remote adapter:
 
-- `send_message(channel, text)`: Send a message to a channel
-- `list_channels()`: Get a list of all channels
-- `get_messages(channel, limit, cursor)`: Get recent messages from a channel with pagination support
+```python
+import chat_client_adapter
+from chat_client_api import get_client
 
-## Data Transfer Objects
+client = get_client()
+```
 
-- `Message`: Represents a chat message
-- `Channel`: Represents a chat channel
-- `SendMessageResponse`: Response from sending a message
+## DTOs
 
-See the [full documentation](../../docs/components/chat_client_api.md) for detailed API reference.
+- `Channel`
+- `Message`
+- `SendMessageResponse`
+
+See [the component docs](../../docs/components/chat_client_api.md) for details.

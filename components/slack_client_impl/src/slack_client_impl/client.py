@@ -1,5 +1,4 @@
 """Slack implementation of ChatClient."""
-
 import os
 
 from chat_client_api.client import (
@@ -9,6 +8,8 @@ from chat_client_api.client import (
     SendMessageResponse,
     register_client,
 )
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 
 
 class SlackClient(ChatClient):
@@ -22,16 +23,61 @@ class SlackClient(ChatClient):
 
         """
         self.token = token
+        self.client = WebClient(token=token)
 
-    def send_message(self, channel: str, text: str) -> SendMessageResponse:
-        """Send a message to a Slack channel."""
-        msg = "Coming in next iteration"
-        raise NotImplementedError(msg)
+    def send_message(
+        self,
+        channel: str,
+        text: str,
+    ) -> SendMessageResponse:
+        """Send a message to a Slack channel.
+
+        Args:
+            channel: Channel ID or name
+            text: Message text to send
+
+        Returns:
+            SendMessageResponse with message details
+
+        """
+        try:
+            response = self.client.chat_postMessage(
+                channel=channel,
+                text=text,
+            )
+            return SendMessageResponse(
+                message_id=str(response["ts"]),
+                channel=str(response["channel"]),
+                timestamp=str(response["ts"]),
+                ok=bool(response["ok"]),
+            )
+        except SlackApiError:
+            return SendMessageResponse(
+                message_id="",
+                channel=channel,
+                timestamp="",
+                ok=False,
+            )
 
     def list_channels(self) -> list[Channel]:
-        """List all Slack channels."""
-        msg = "Coming in next iteration"
-        raise NotImplementedError(msg)
+        """List all Slack channels.
+
+        Returns:
+            List of Channel objects
+
+        """
+        try:
+            response = self.client.conversations_list()
+            return [
+                Channel(
+                    channel_id=str(ch["id"]),
+                    name=str(ch["name"]),
+                    is_private=bool(ch["is_private"]),
+                )
+                for ch in response["channels"]
+            ]
+        except SlackApiError:
+            return []
 
     def get_messages(
         self,
@@ -43,16 +89,49 @@ class SlackClient(ChatClient):
 
         Args:
             channel: Channel ID or name
-            limit: Maximum number of messages to retrieve
-            cursor: Pagination cursor for fetching next set of messages
+            limit: Maximum number of messages
+            cursor: Pagination cursor
+
+        Returns:
+            List of Message objects
 
         """
-        msg = "Coming in next iteration"
-        raise NotImplementedError(msg)
+        try:
+            if cursor:
+                response = self.client.conversations_history(
+                    channel=channel,
+                    limit=limit,
+                    cursor=cursor,
+                )
+            else:
+                response = self.client.conversations_history(
+                    channel=channel,
+                    limit=limit,
+                )
+            return [
+                Message(
+                    message_id=str(msg.get("ts", "")),
+                    channel=channel,
+                    text=str(msg.get("text", "")),
+                    sender=str(msg.get("user", "unknown")),
+                    timestamp=str(msg.get("ts", "")),
+                )
+                for msg in response["messages"]
+            ]
+        except SlackApiError:
+            return []
 
 
 def _create_slack_client() -> SlackClient:
-    """Create Slack client from environment variables."""
+    """Create Slack client from environment variables.
+
+    Returns:
+        SlackClient instance
+
+    Raises:
+        ValueError: If token not set
+
+    """
     token = os.getenv("SLACK_BOT_TOKEN")
     if not token:
         msg = "SLACK_BOT_TOKEN environment variable must be set"
@@ -60,5 +139,5 @@ def _create_slack_client() -> SlackClient:
     return SlackClient(token)
 
 
-# Register this implementation when the module is imported
+# Register this implementation when module is imported
 register_client(_create_slack_client)

@@ -1,11 +1,15 @@
-# OSPSD Team 9 - Chat Client
+# Chat Client Service
 
-HW1: Modular chat client with Slack implementation.
+HW2 turns the chat client into a deployable service while preserving the original `ChatClient` interface.
 
-## Overview
+## Components
 
-This project demonstrates interface-implementation separation and dependency injection patterns.
+- `chat_client_api`
+- `slack_client_impl`
+- `chat_client_service`
+- `chat_client_service_api_client`
+- `chat_client_adapter`
 
-## Quick Start
+## Result
 
-See [Contributing Guide](contributing.md) for setup instructions.
+Consumer code can still call the same `ChatClient` methods whether the implementation is local (`slack_client_impl`) or remote (`chat_client_adapter`).
