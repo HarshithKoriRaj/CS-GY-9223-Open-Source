@@ -273,7 +273,7 @@ class ChatClientServiceAdapter(ChatClient):
             time.sleep(self.auth_config.poll_interval_seconds)
 
         msg = (
-            "Slack OAuth did not complete before the configured timeout expired. "
+            "OAuth authentication did not complete before the timeout expired. "
             "Open the login URL again and retry."
         )
         raise ChatClientAuthenticationTimeoutError(msg)

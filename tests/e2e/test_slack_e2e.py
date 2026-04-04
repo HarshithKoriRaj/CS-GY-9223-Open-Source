@@ -6,7 +6,7 @@ import os
 
 import httpx
 import pytest
-from chat_client_api.client import Channel, Message
+from chat_client_api.client import Channel, ChatClient, Message
 from slack_client_impl.client import SlackClient
 
 LIVE_SERVICE_URL = os.getenv("CHAT_CLIENT_SERVICE_BASE_URL", "https://os-bmaq.onrender.com")
@@ -118,3 +118,42 @@ class TestSlackClientE2E:
         result = slack.send_message(channel, "E2E test from pytest")
         assert result.ok is True
         assert result.channel == channel
+
+
+class TestSameConsumerCodeBothBackends:
+    """Demonstrates the same consumer code working against both backends.
+
+    These tests verify the core architecture goal: the consumer (caller of
+    get_client()) does not need to change regardless of which backend is active.
+    Requires SLACK_BOT_TOKEN for the local backend and
+    CHAT_CLIENT_SERVICE_BASE_URL + CHAT_CLIENT_SERVICE_SESSION_ID for remote.
+    """
+
+    def _assert_list_channels_returns_channels(self, client: ChatClient) -> None:
+        channels = client.list_channels()
+        assert isinstance(channels, list)
+        assert all(isinstance(c, Channel) for c in channels)
+
+    def test_local_backend_list_channels(self) -> None:
+        """The local SlackClient satisfies the ChatClient interface."""
+        token = os.getenv("SLACK_BOT_TOKEN")
+        if not token:
+            pytest.skip("SLACK_BOT_TOKEN not set")
+        import slack_client_impl  # noqa: F401
+        from chat_client_api.client import get_client
+        client = get_client()
+        self._assert_list_channels_returns_channels(client)
+
+    def test_remote_backend_list_channels(self) -> None:
+        """The service adapter satisfies the same ChatClient interface."""
+        base_url = os.getenv("CHAT_CLIENT_SERVICE_BASE_URL")
+        session_id = os.getenv("CHAT_CLIENT_SERVICE_SESSION_ID")
+        if not base_url or not session_id:
+            pytest.skip(
+                "CHAT_CLIENT_SERVICE_BASE_URL and "
+                "CHAT_CLIENT_SERVICE_SESSION_ID must be set",
+            )
+        import chat_client_adapter  # noqa: F401
+        from chat_client_api.client import get_client
+        client = get_client()
+        self._assert_list_channels_returns_channels(client)

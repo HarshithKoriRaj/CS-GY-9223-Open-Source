@@ -9,11 +9,11 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 from chat_client_api.client import Channel, Message, SendMessageResponse
 from chat_client_service.main import (
-    AuthSession,
     _session_store,
     app,
     reset_service_state,
 )
+from chat_client_service.models import AuthSession
 from fastapi.testclient import TestClient
 
 HTTP_200_OK = 200
@@ -502,11 +502,12 @@ def test_delete_session_also_removes_bound_oauth_state() -> None:
 
 
 def test_build_chat_client_returns_slack_client() -> None:
-    """build_chat_client should return a SlackClient wrapping the given token."""
+    """build_chat_client should return a ChatClient implementation."""
+    from chat_client_api.client import ChatClient
     from chat_client_service.main import build_chat_client
 
     result = build_chat_client("xoxb-test-token")
-    assert type(result).__name__ == "SlackClient"
+    assert isinstance(result, ChatClient)
 
 
 def test_create_app_returns_fastapi_instance() -> None:
