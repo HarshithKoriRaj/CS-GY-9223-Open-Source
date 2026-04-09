@@ -24,6 +24,7 @@ HTTP_401_UNAUTHORIZED = 401
 HTTP_404_NOT_FOUND = 404
 HTTP_500_INTERNAL_SERVER_ERROR = 500
 HTTP_502_BAD_GATEWAY = 502
+HTTP_503_SERVICE_UNAVAILABLE = 503
 
 client = TestClient(app)
 
@@ -44,11 +45,31 @@ def _create_authenticated_session() -> str:
     return session.session_id
 
 
+# ---------------------------------------------------------------------------
+# Health & Metrics
+# ---------------------------------------------------------------------------
+
+
 def test_health() -> None:
     """Health endpoint should return an ok payload."""
     response = client.get("/health")
     assert response.status_code == HTTP_200_OK
     assert response.json() == {"status": "ok"}
+
+
+def test_metrics_initial_state() -> None:
+    """Metrics endpoint should return zeroed counters on a fresh service."""
+    response = client.get("/metrics")
+    assert response.status_code == HTTP_200_OK
+    data = response.json()
+    assert "total_requests" in data
+    assert "success_rate" in data
+    assert "average_latency_ms" in data
+
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
 
 
 def test_create_auth_session() -> None:
@@ -165,6 +186,11 @@ def test_delete_auth_session_clears_state() -> None:
     assert status_response.status_code == HTTP_404_NOT_FOUND
 
 
+# ---------------------------------------------------------------------------
+# Channels
+# ---------------------------------------------------------------------------
+
+
 def test_list_channels_requires_authenticated_session() -> None:
     """List channels should reject requests without a session header."""
     response = client.get("/channels")
@@ -176,7 +202,7 @@ def test_list_channels() -> None:
     """List channels should serialize channel DTOs from the concrete client."""
     session_id = _create_authenticated_session()
     mock_client = mock.MagicMock()
-    mock_client.list_channels.return_value = [
+    mock_client.get_channels.return_value = [
         Channel(
             channel_id="C001",
             name="general",
@@ -202,12 +228,52 @@ def test_list_channels() -> None:
     }
 
 
+def test_get_channel_success() -> None:
+    """get_channel endpoint should return a single channel."""
+    session_id = _create_authenticated_session()
+    mock_client = mock.MagicMock()
+    mock_client.get_channel.return_value = Channel(
+        channel_id="C001",
+        name="general",
+        is_private=False,
+    )
+
+    with mock.patch(
+        "chat_client_service.main.build_chat_client",
+        return_value=mock_client,
+    ):
+        response = client.get("/channels/C001", headers={"X-Session-ID": session_id})
+
+    assert response.status_code == HTTP_200_OK
+    assert response.json()["channel_id"] == "C001"
+
+
+def test_get_channel_not_found() -> None:
+    """get_channel should return 404 when the channel does not exist."""
+    session_id = _create_authenticated_session()
+    mock_client = mock.MagicMock()
+    mock_client.get_channel.side_effect = ValueError("Channel not found: C999")
+
+    with mock.patch(
+        "chat_client_service.main.build_chat_client",
+        return_value=mock_client,
+    ):
+        response = client.get("/channels/C999", headers={"X-Session-ID": session_id})
+
+    assert response.status_code == HTTP_404_NOT_FOUND
+
+
+# ---------------------------------------------------------------------------
+# Messages
+# ---------------------------------------------------------------------------
+
+
 def test_send_message() -> None:
     """Send message should forward the JSON body to the chat client."""
     session_id = _create_authenticated_session()
     mock_client = mock.MagicMock()
     mock_client.send_message.return_value = SendMessageResponse(
-        message_id="123",
+        message_id="C001:12345.678",
         channel="C001",
         timestamp="12345.678",
         ok=True,
@@ -225,7 +291,7 @@ def test_send_message() -> None:
 
     assert response.status_code == HTTP_200_OK
     assert response.json() == {
-        "message_id": "123",
+        "message_id": "C001:12345.678",
         "channel": "C001",
         "timestamp": "12345.678",
         "ok": True,
@@ -238,7 +304,7 @@ def test_get_messages() -> None:
     mock_client = mock.MagicMock()
     mock_client.get_messages.return_value = [
         Message(
-            message_id="123",
+            message_id="C001:12345.678",
             channel="C001",
             text="Hello",
             sender="U001",
@@ -260,7 +326,7 @@ def test_get_messages() -> None:
     assert response.json() == {
         "messages": [
             {
-                "message_id": "123",
+                "message_id": "C001:12345.678",
                 "channel": "C001",
                 "text": "Hello",
                 "sender": "U001",
@@ -270,7 +336,144 @@ def test_get_messages() -> None:
     }
 
 
-# --- error path and branch coverage ---
+def test_get_message_success() -> None:
+    """get_message endpoint should return a single message."""
+    session_id = _create_authenticated_session()
+    mock_client = mock.MagicMock()
+    mock_client.get_message.return_value = Message(
+        message_id="C001:12345.678",
+        channel="C001",
+        text="Hello",
+        sender="U001",
+        timestamp="12345.678",
+    )
+
+    with mock.patch(
+        "chat_client_service.main.build_chat_client",
+        return_value=mock_client,
+    ):
+        response = client.get(
+            "/messages/C001:12345.678",
+            headers={"X-Session-ID": session_id},
+        )
+
+    assert response.status_code == HTTP_200_OK
+    assert response.json()["text"] == "Hello"
+
+
+def test_get_message_not_found() -> None:
+    """get_message should return 404 when message does not exist."""
+    session_id = _create_authenticated_session()
+    mock_client = mock.MagicMock()
+    mock_client.get_message.side_effect = ValueError("Message not found")
+
+    with mock.patch(
+        "chat_client_service.main.build_chat_client",
+        return_value=mock_client,
+    ):
+        response = client.get(
+            "/messages/C001:99999",
+            headers={"X-Session-ID": session_id},
+        )
+
+    assert response.status_code == HTTP_404_NOT_FOUND
+
+
+def test_delete_message_success() -> None:
+    """delete_message endpoint should return ok status."""
+    session_id = _create_authenticated_session()
+    mock_client = mock.MagicMock()
+    mock_client.delete_message.return_value = None
+
+    with mock.patch(
+        "chat_client_service.main.build_chat_client",
+        return_value=mock_client,
+    ):
+        response = client.delete(
+            "/messages/C001:12345.678",
+            headers={"X-Session-ID": session_id},
+        )
+
+    assert response.status_code == HTTP_200_OK
+    assert response.json() == {"status": "ok"}
+
+
+def test_delete_message_not_found() -> None:
+    """delete_message should return 404 when message does not exist."""
+    session_id = _create_authenticated_session()
+    mock_client = mock.MagicMock()
+    mock_client.delete_message.side_effect = ValueError("Message not found")
+
+    with mock.patch(
+        "chat_client_service.main.build_chat_client",
+        return_value=mock_client,
+    ):
+        response = client.delete(
+            "/messages/C001:99999",
+            headers={"X-Session-ID": session_id},
+        )
+
+    assert response.status_code == HTTP_404_NOT_FOUND
+
+
+# ---------------------------------------------------------------------------
+# AI chat
+# ---------------------------------------------------------------------------
+
+
+def test_ai_chat_no_implementation_returns_503() -> None:
+    """ai/chat should return 503 when no AI client is registered."""
+    session_id = _create_authenticated_session()
+    mock_client = mock.MagicMock()
+
+    with (
+        mock.patch(
+            "chat_client_service.main.build_chat_client",
+            return_value=mock_client,
+        ),
+        mock.patch(
+            "chat_client_service.main.get_ai_client",
+            side_effect=RuntimeError("No AI client implementation registered."),
+        ),
+        mock.patch("chat_client_service.main.AiTool"),
+    ):
+        response = client.post(
+            "/ai/chat",
+            headers={"X-Session-ID": session_id},
+            json={"prompt": "hello"},
+        )
+
+    assert response.status_code == HTTP_503_SERVICE_UNAVAILABLE
+
+
+def test_ai_chat_returns_reply() -> None:
+    """ai/chat should return the AI model's reply."""
+    session_id = _create_authenticated_session()
+    mock_chat_client = mock.MagicMock()
+    mock_ai = mock.MagicMock()
+    mock_ai.send_message_with_tools.return_value = "Here are your channels!"
+
+    with (
+        mock.patch(
+            "chat_client_service.main.build_chat_client",
+            return_value=mock_chat_client,
+        ),
+        mock.patch("chat_client_service.main.get_ai_client", return_value=mock_ai),
+        mock.patch("chat_client_service.main.AiTool", return_value=mock.MagicMock()),
+    ):
+        response = client.post(
+            "/ai/chat",
+            headers={"X-Session-ID": session_id},
+            json={"prompt": "list my channels", "channel": "C001"},
+        )
+
+    assert response.status_code == HTTP_200_OK
+    assert response.json()["reply"] == "Here are your channels!"
+
+
+# ---------------------------------------------------------------------------
+# Error paths / branch coverage
+# ---------------------------------------------------------------------------
 
 
 def test_channels_with_unauthenticated_session() -> None:

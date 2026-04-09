@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: chat-client-service
+    runtime: python
+    rootDir: components/chat_client_service
+    buildCommand: |
+      curl -LsSf https://astral.sh/uv/install.sh | sh
+      export PATH="$HOME/.local/bin:$PATH"
+      cd /opt/render/project/src
+      uv sync --all-packages
+    startCommand: |
+      export PATH="$HOME/.local/bin:$PATH"
+      export PYTHONPATH="src:../chat_client_api/src:../slack_client_impl/src:../ai_client_api/src:../claude_ai_client_impl/src"
+      uv run uvicorn chat_client_service.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: SLACK_CLIENT_ID
+        sync: false
+      - key: SLACK_CLIENT_SECRET
+        sync: false
+      - key: SLACK_REDIRECT_URI
+        sync: false
+      - key: SLACK_SCOPES
+        value: "chat:write,channels:read,channels:history,chat:write.public"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: "claude-sonnet-4-6"
+      - key: ENV
+        value: production

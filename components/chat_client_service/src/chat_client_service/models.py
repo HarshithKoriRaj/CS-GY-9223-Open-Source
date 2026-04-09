@@ -172,6 +172,23 @@ class ListChannelsResponse(BaseModel):
     channels: list[ChannelModel]
 
 
+class GetChannelResponse(BaseModel):
+    """Get single channel response model."""
+
+    channel_id: str
+    name: str
+    is_private: bool
+
+    @classmethod
+    def from_dto(cls, channel: Channel) -> GetChannelResponse:
+        """Convert a channel DTO into an API response model."""
+        return cls(
+            channel_id=channel.channel_id,
+            name=channel.name,
+            is_private=channel.is_private,
+        )
+
+
 class SendMessageRequest(BaseModel):
     """Send message request model."""
 
@@ -223,3 +240,33 @@ class GetMessagesResponse(BaseModel):
     """Get messages response model."""
 
     messages: list[MessageModel]
+
+
+class DeleteMessageResponse(BaseModel):
+    """Delete message response model."""
+
+    status: str
+
+
+class MetricsSnapshot(BaseModel):
+    """Current telemetry snapshot."""
+
+    total_requests: int
+    successful_requests: int
+    failed_requests: int
+    success_rate: float
+    failure_rate: float
+    average_latency_ms: float
+
+
+class AiChatRequest(BaseModel):
+    """AI chat request model."""
+
+    prompt: str = Field(min_length=1)
+    channel: str | None = None
+
+
+class AiChatResponse(BaseModel):
+    """AI chat response model."""
+
+    reply: str

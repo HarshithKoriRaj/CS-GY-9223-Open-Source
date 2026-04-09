@@ -1,0 +1,13 @@
+[project]
+name = "claude-ai-client-impl"
+version = "0.1.0"
+requires-python = ">=3.12"
+description = "Anthropic Claude implementation of ai-client-api"
+dependencies = [
+    "ai-client-api",
+    "anthropic>=0.40.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -1,5 +1,6 @@
 """Slack implementation of ChatClient."""
 import os
+from typing import Any
 
 from chat_client_api.client import (
     Channel,
@@ -10,6 +11,23 @@ from chat_client_api.client import (
 )
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+
+_MESSAGE_ID_SEP = ":"
+
+
+def _encode_message_id(channel: str, ts: str) -> str:
+    return f"{channel}{_MESSAGE_ID_SEP}{ts}"
+
+
+def _decode_message_id(message_id: str) -> tuple[str, str]:
+    parts = message_id.split(_MESSAGE_ID_SEP, 1)
+    if len(parts) != 2:  # noqa: PLR2004
+        msg = (
+            f"Invalid message_id format: {message_id!r}. "
+            "Expected 'channel_id:timestamp'."
+        )
+        raise ValueError(msg)
+    return parts[0], parts[1]
 
 
 class SlackClient(ChatClient):
@@ -46,7 +64,9 @@ class SlackClient(ChatClient):
                 text=text,
             )
             return SendMessageResponse(
-                message_id=str(response["ts"]),
+                message_id=_encode_message_id(
+                    str(response["channel"]), str(response["ts"]),
+                ),
                 channel=str(response["channel"]),
                 timestamp=str(response["ts"]),
                 ok=bool(response["ok"]),
@@ -59,7 +79,7 @@ class SlackClient(ChatClient):
                 ok=False,
             )
 
-    def list_channels(self) -> list[Channel]:
+    def get_channels(self) -> list[Channel]:
         """List all Slack channels.
 
         Returns:
@@ -78,6 +98,31 @@ class SlackClient(ChatClient):
             ]
         except SlackApiError:
             return []
+
+    def get_channel(self, channel_id: str) -> Channel:
+        """Get a single Slack channel by ID.
+
+        Args:
+            channel_id: The Slack channel ID
+
+        Returns:
+            Channel object
+
+        Raises:
+            ValueError: If channel is not found or API call fails
+
+        """
+        try:
+            response = self.client.conversations_info(channel=channel_id)
+            ch = response["channel"]
+            return Channel(
+                channel_id=str(ch["id"]),
+                name=str(ch["name"]),
+                is_private=bool(ch["is_private"]),
+            )
+        except SlackApiError as exc:
+            msg = f"Channel not found: {channel_id}"
+            raise ValueError(msg) from exc
 
     def get_messages(
         self,
@@ -110,7 +155,7 @@ class SlackClient(ChatClient):
                 )
             return [
                 Message(
-                    message_id=str(msg.get("ts", "")),
+                    message_id=_encode_message_id(channel, str(msg.get("ts", ""))),
                     channel=channel,
                     text=str(msg.get("text", "")),
                     sender=str(msg.get("user", "unknown")),
@@ -120,6 +165,61 @@ class SlackClient(ChatClient):
             ]
         except SlackApiError:
             return []
+
+    def get_message(self, message_id: str) -> Message:
+        """Get a single Slack message by encoded ID.
+
+        Args:
+            message_id: Encoded message ID in format 'channel_id:timestamp'
+
+        Returns:
+            Message object
+
+        Raises:
+            ValueError: If message is not found
+
+        """
+        channel, ts = _decode_message_id(message_id)
+        try:
+            response = self.client.conversations_history(
+                channel=channel,
+                latest=ts,
+                oldest=ts,
+                limit=1,
+                inclusive=True,
+            )
+            messages: list[Any] = response.get("messages", [])
+            if not messages:
+                msg = f"Message not found: {message_id}"
+                raise ValueError(msg)
+            raw = messages[0]
+            return Message(
+                message_id=message_id,
+                channel=channel,
+                text=str(raw.get("text", "")),
+                sender=str(raw.get("user", "unknown")),
+                timestamp=ts,
+            )
+        except SlackApiError as exc:
+            msg = f"Message not found: {message_id}"
+            raise ValueError(msg) from exc
+
+    def delete_message(self, message_id: str) -> None:
+        """Delete a Slack message by encoded ID.
+
+        Args:
+            message_id: Encoded message ID in format 'channel_id:timestamp'
+
+        Raises:
+            ValueError: If message cannot be deleted
+
+        """
+        channel, ts = _decode_message_id(message_id)
+        try:
+            self.client.chat_delete(channel=channel, ts=ts)
+        except SlackApiError as exc:
+            msg = f"Failed to delete message: {message_id}"
+            raise ValueError(msg) from exc
 
 
 def _create_slack_client() -> SlackClient:

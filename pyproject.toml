@@ -1,11 +1,12 @@
 [project]
-name = "ospsd-team9-hw2"
-version = "0.2.0"
+name = "ospsd-team9-hw3"
+version = "0.3.0"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.135.1",
     "slack-sdk>=3.40.0",
     "uvicorn>=0.42.0",
+    "anthropic>=0.40.0",
 ]
 
 [dependency-groups]
@@ -26,6 +27,8 @@ members = [
     "components/slack_client_impl",
     "components/chat_client_service",
     "components/chat_client_service_api_client",
+    "components/ai_client_api",
+    "components/claude_ai_client_impl",
 ]
 
 [tool.uv.sources]
@@ -34,6 +37,8 @@ chat-client-adapter = { workspace = true }
 slack-client-impl = { workspace = true }
 chat-client-service = { workspace = true }
 chat-client-service-api-client = { workspace = true }
+ai-client-api = { workspace = true }
+claude-ai-client-impl = { workspace = true }
 
 [tool.ruff]
 line-length = 88
@@ -51,9 +56,13 @@ ignore = [
     "S105",  # Possible hardcoded password (test tokens are not real secrets)
     "INP001",  # Implicit namespace package (tests don't need __init__.py)
     "ANN201",  # Missing return type annotation (acceptable for test functions)
+    "ARG001",  # Unused function argument (interface conformance in tests)
     "ARG002",  # Unused method arguments (interface methods in tests)
     "SLF001",  # Private member access (testing internal state)
     "SIM117",  # Nested with statements (acceptable for test clarity)
+    "ANN401",  # Dynamically typed Any (needed for generic dicts/tools)
+    "EM101",   # Exception with string literal (msg= pattern used where needed)
+    "TRY003",  # Long exception messages (descriptive errors are fine)
     # Minor formatting exceptions
     "ERA001",  # Commented code (useful for TODOs in first draft)
     "FIX002",  # TODO comments (acceptable for first draft)
@@ -80,6 +89,8 @@ testpaths = [
     "components/chat_client_api/tests",
     "components/slack_client_impl/tests",
     "components/chat_client_service/tests",
+    "components/ai_client_api/tests",
+    "components/claude_ai_client_impl/tests",
 ]
 python_files = "test_*.py"
 

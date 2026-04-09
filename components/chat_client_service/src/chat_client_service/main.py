@@ -4,26 +4,42 @@ from __future__ import annotations
 
 import os
 import secrets
+import time
 from collections.abc import Callable
-from typing import Annotated
+from typing import Annotated, Any
 from urllib.parse import urlencode
 
 import httpx
+from ai_client_api.client import AiTool, get_ai_client
 from chat_client_api.client import ChatClient
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from fastapi.responses import RedirectResponse
 
 from .models import (
+    AiChatRequest,
+    AiChatResponse,
     AuthCallbackResponse,
     AuthSessionResponse,
     AuthSessionStatusResponse,
     ChannelModel,
+    DeleteMessageResponse,
+    GetChannelResponse,
     GetMessagesResponse,
     HealthResponse,
     InMemoryAuthSessionStore,
     ListChannelsResponse,
     LogoutResponse,
     MessageModel,
+    MetricsSnapshot,
     SendMessageRequest,
     SendMessageResponseModel,
     ServiceSettings,
@@ -44,11 +60,42 @@ _client_factory: TokenClientFactory = _default_client_factory
 app = FastAPI(
     title="Chat Client Service",
     description="Slack-backed chat client service with OAuth session tokens.",
-    version="0.2.0",
+    version="0.3.0",
 )
 
 _session_store = InMemoryAuthSessionStore()
 SessionHeader = Annotated[str | None, Header(alias="X-Session-ID")]
+
+# ---------------------------------------------------------------------------
+# Simple in-process telemetry counters
+# ---------------------------------------------------------------------------
+
+_metrics: dict[str, float] = {
+    "total_requests": 0,
+    "successful_requests": 0,
+    "failed_requests": 0,
+    "total_latency_ms": 0,
+}
+
+
+@app.middleware("http")
+async def _telemetry_middleware(
+    request: Request, call_next: Callable[[Request], object],
+) -> Response:
+    """Track request count, latency, and success/failure rate."""
+    start = time.perf_counter()
+    response: Response = await call_next(request)  # type: ignore[misc]
+    elapsed_ms = (time.perf_counter() - start) * 1000.0
+
+    _metrics["total_requests"] += 1
+    _metrics["total_latency_ms"] += elapsed_ms
+
+    if response.status_code < 400:  # noqa: PLR2004
+        _metrics["successful_requests"] += 1
+    else:
+        _metrics["failed_requests"] += 1
+
+    return response
 
 
 def get_settings() -> ServiceSettings:
@@ -65,7 +112,7 @@ def get_settings() -> ServiceSettings:
         ),
         slack_scopes=os.getenv(
             "SLACK_SCOPES",
-            "chat:write,channels:read,channels:history",
+            "chat:write,channels:read,channels:history,chat:write.public",
         ),
     )
 
@@ -78,6 +125,8 @@ def build_chat_client(slack_bot_token: str) -> ChatClient:
 def reset_service_state() -> None:
     """Reset global in-memory service state for tests."""
     _session_store.reset()
+    for key in _metrics:
+        _metrics[key] = 0
 
 
 def _build_login_url(settings: ServiceSettings, session_id: str) -> str:
@@ -178,10 +227,37 @@ def _get_authenticated_client(
     return build_chat_client(slack_bot_token)
 
 
+# ---------------------------------------------------------------------------
+# Health & Metrics
+# ---------------------------------------------------------------------------
+
+
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     """Report service health."""
     return HealthResponse(status="ok")
+
+
+@app.get("/metrics", response_model=MetricsSnapshot)
+def metrics() -> MetricsSnapshot:
+    """Return current telemetry snapshot."""
+    total = _metrics["total_requests"]
+    success = _metrics["successful_requests"]
+    failed = _metrics["failed_requests"]
+    avg_latency = _metrics["total_latency_ms"] / total if total > 0 else 0.0
+    return MetricsSnapshot(
+        total_requests=int(total),
+        successful_requests=int(success),
+        failed_requests=int(failed),
+        success_rate=round(success / total, 4) if total > 0 else 0.0,
+        failure_rate=round(failed / total, 4) if total > 0 else 0.0,
+        average_latency_ms=round(avg_latency, 2),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Auth endpoints
+# ---------------------------------------------------------------------------
 
 
 @app.post(
@@ -297,6 +373,11 @@ def delete_auth_session(session_id: str) -> LogoutResponse:
     return LogoutResponse(status="ok")
 
 
+# ---------------------------------------------------------------------------
+# Channel endpoints
+# ---------------------------------------------------------------------------
+
+
 @app.get("/channels", response_model=ListChannelsResponse)
 def list_channels(
     client: Annotated[ChatClient, Depends(_get_authenticated_client)],
@@ -304,9 +385,30 @@ def list_channels(
     """List Slack channels for the authenticated session."""
     channels = [
         ChannelModel.from_dto(channel)
-        for channel in client.list_channels()
+        for channel in client.get_channels()
     ]
     return ListChannelsResponse(channels=channels)
+
+
+@app.get("/channels/{channel_id}", response_model=GetChannelResponse)
+def get_channel(
+    channel_id: str,
+    client: Annotated[ChatClient, Depends(_get_authenticated_client)],
+) -> GetChannelResponse:
+    """Get a single Slack channel by ID."""
+    try:
+        channel = client.get_channel(channel_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    return GetChannelResponse.from_dto(channel)
+
+
+# ---------------------------------------------------------------------------
+# Message endpoints
+# ---------------------------------------------------------------------------
 
 
 @app.post("/messages", response_model=SendMessageResponseModel)
@@ -331,6 +433,97 @@ def get_messages(
     return GetMessagesResponse(
         messages=[MessageModel.from_dto(message) for message in messages],
     )
+
+
+@app.get("/messages/{message_id:path}", response_model=MessageModel)
+def get_message(
+    message_id: str,
+    client: Annotated[ChatClient, Depends(_get_authenticated_client)],
+) -> MessageModel:
+    """Get a single message by ID."""
+    try:
+        message = client.get_message(message_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    return MessageModel.from_dto(message)
+
+
+@app.delete("/messages/{message_id:path}", response_model=DeleteMessageResponse)
+def delete_message(
+    message_id: str,
+    client: Annotated[ChatClient, Depends(_get_authenticated_client)],
+) -> DeleteMessageResponse:
+    """Delete a message by ID."""
+    try:
+        client.delete_message(message_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    return DeleteMessageResponse(status="ok")
+
+
+@app.post("/ai/chat", response_model=AiChatResponse)
+def ai_chat(
+    payload: AiChatRequest,
+    client: Annotated[ChatClient, Depends(_get_authenticated_client)],
+) -> AiChatResponse:
+    """Send a natural-language prompt to the AI assistant.
+
+    The assistant has access to chat domain tools (list channels, send
+    messages, fetch history) so it can take actions on your behalf.
+    """
+    del client  # AI client handles domain actions via tool calling
+
+    tools = [
+        AiTool(
+            name="get_channels",
+            description="List all available Slack channels",
+            parameters={},
+        ),
+        AiTool(
+            name="send_message",
+            description="Send a text message to a Slack channel",
+            parameters={
+                "channel": {"type": "string", "description": "Channel ID"},
+                "text": {"type": "string", "description": "Message text"},
+            },
+        ),
+        AiTool(
+            name="get_messages",
+            description="Fetch recent messages from a Slack channel",
+            parameters={
+                "channel": {"type": "string", "description": "Channel ID"},
+                "limit": {
+                    "type": "integer",
+                    "description": "Max messages to fetch",
+                    "default": 10,
+                },
+            },
+        ),
+    ]
+
+    try:
+        ai = get_ai_client()
+        context: dict[str, Any] = {"session_active": True}
+        if payload.channel:
+            context["channel"] = payload.channel
+        reply = ai.send_message_with_tools(
+            prompt=payload.prompt,
+            tools=tools,
+            context=context,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    return AiChatResponse(reply=reply)
 
 
 def create_app() -> FastAPI:

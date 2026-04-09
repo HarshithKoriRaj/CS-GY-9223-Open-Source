@@ -56,10 +56,13 @@ def test_register_client_replaces_previous_factory() -> None:
             channel: str,
             text: str,
         ) -> SendMessageResponse:
-            return SendMessageResponse("", channel, "", ok=True)
+            return SendMessageResponse(f"{channel}:0", channel, "0", ok=True)
 
-        def list_channels(self) -> list[Channel]:
+        def get_channels(self) -> list[Channel]:
             return []
+
+        def get_channel(self, channel_id: str) -> Channel:
+            return Channel(channel_id=channel_id, name="", is_private=False)
 
         def get_messages(
             self,
@@ -68,6 +71,14 @@ def test_register_client_replaces_previous_factory() -> None:
             cursor: str | None = None,
         ) -> list[Message]:
             return []
+
+        def get_message(self, message_id: str) -> Message:
+            return Message(
+                message_id=message_id, channel="", text="", sender="", timestamp="",
+            )
+
+        def delete_message(self, message_id: str) -> None:
+            pass
 
     def factory_a() -> ChatClient:
         call_count["n"] += 1

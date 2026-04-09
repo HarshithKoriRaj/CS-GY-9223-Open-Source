@@ -52,11 +52,26 @@ class ChatClient(ABC):
         """
 
     @abstractmethod
-    def list_channels(self) -> list[Channel]:
+    def get_channels(self) -> list[Channel]:
         """List all available channels.
 
         Returns:
             List of Channel objects
+
+        """
+
+    @abstractmethod
+    def get_channel(self, channel_id: str) -> Channel:
+        """Get a single channel by ID.
+
+        Args:
+            channel_id: The channel ID to retrieve
+
+        Returns:
+            Channel object
+
+        Raises:
+            ValueError: If channel is not found
 
         """
 
@@ -76,6 +91,33 @@ class ChatClient(ABC):
 
         Returns:
             List of Message objects
+
+        """
+
+    @abstractmethod
+    def get_message(self, message_id: str) -> Message:
+        """Get a single message by ID.
+
+        Args:
+            message_id: The message ID (format: channel_id:timestamp)
+
+        Returns:
+            Message object
+
+        Raises:
+            ValueError: If message is not found
+
+        """
+
+    @abstractmethod
+    def delete_message(self, message_id: str) -> None:
+        """Delete a message by ID.
+
+        Args:
+            message_id: The message ID (format: channel_id:timestamp)
+
+        Raises:
+            ValueError: If message cannot be deleted
 
         """
 
