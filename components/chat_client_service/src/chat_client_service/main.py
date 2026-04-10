@@ -41,7 +41,6 @@ from .models import (
     MessageModel,
     MetricsSnapshot,
     SendMessageRequest,
-    SendMessageResponseModel,
     ServiceSettings,
 )
 
@@ -411,14 +410,20 @@ def get_channel(
 # ---------------------------------------------------------------------------
 
 
-@app.post("/messages", response_model=SendMessageResponseModel)
+@app.post("/messages", response_model=MessageModel)
 def send_message(
     payload: SendMessageRequest,
     client: Annotated[ChatClient, Depends(_get_authenticated_client)],
-) -> SendMessageResponseModel:
+) -> MessageModel:
     """Send a message to a Slack channel."""
-    response = client.send_message(channel=payload.channel, text=payload.text)
-    return SendMessageResponseModel.from_dto(response)
+    try:
+        message = client.send_message(channel_id=payload.channel, text=payload.text)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    return MessageModel.from_dto(message)
 
 
 @app.get("/messages", response_model=GetMessagesResponse)
@@ -429,7 +434,7 @@ def get_messages(
     cursor: Annotated[str | None, Query()] = None,
 ) -> GetMessagesResponse:
     """Get recent messages from a Slack channel."""
-    messages = client.get_messages(channel=channel, limit=limit, cursor=cursor)
+    messages = client.get_messages(channel_id=channel, limit=limit, cursor=cursor)
     return GetMessagesResponse(
         messages=[MessageModel.from_dto(message) for message in messages],
     )

@@ -5,7 +5,6 @@ from chat_client_api.client import (
     Channel,
     ChatClient,
     Message,
-    SendMessageResponse,
     _ClientRegistry,
     get_client,
     register_client,
@@ -20,13 +19,14 @@ def setup_function() -> None:
 class MockClient(ChatClient):
     """Mock client for testing."""
 
-    def send_message(self, channel: str, text: str) -> SendMessageResponse:
+    def send_message(self, channel_id: str, text: str) -> Message:
         """Send a mock message."""
-        return SendMessageResponse(
-            message_id=f"{channel}:12345.678",
-            channel=channel,
+        return Message(
+            message_id=f"{channel_id}:12345.678",
+            channel=channel_id,
+            text=text,
+            sender="",
             timestamp="12345.678",
-            ok=True,
         )
 
     def get_channels(self) -> list[Channel]:
@@ -41,15 +41,15 @@ class MockClient(ChatClient):
 
     def get_messages(
         self,
-        channel: str,
+        channel_id: str,
         limit: int = 10,
         cursor: str | None = None,
     ) -> list[Message]:
         """Get mock messages."""
         return [
             Message(
-                message_id=f"{channel}:12345.678",
-                channel=channel,
+                message_id=f"{channel_id}:12345.678",
+                channel=channel_id,
                 text="Hello",
                 sender="U123",
                 timestamp="12345.678",
@@ -97,13 +97,13 @@ def test_get_client_returns_registered_implementation() -> None:
 
 
 def test_send_message_returns_correct_dto() -> None:
-    """Test send_message returns a SendMessageResponse."""
+    """Test send_message returns a Message."""
     register_client(MockClient)
     client = get_client()
     result = client.send_message("general", "hello")
-    assert isinstance(result, SendMessageResponse)
-    assert result.ok is True
+    assert isinstance(result, Message)
     assert result.channel == "general"
+    assert result.text == "hello"
 
 
 def test_get_channels_returns_channel_list() -> None:

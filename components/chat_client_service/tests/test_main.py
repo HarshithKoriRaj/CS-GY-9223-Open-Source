@@ -7,7 +7,7 @@ from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
 import httpx
-from chat_client_api.client import Channel, Message, SendMessageResponse
+from chat_client_api.client import Channel, Message
 from chat_client_service.main import (
     _session_store,
     app,
@@ -223,6 +223,7 @@ def test_list_channels() -> None:
                 "channel_id": "C001",
                 "name": "general",
                 "is_private": False,
+                "channel_type": None,
             },
         ],
     }
@@ -272,11 +273,12 @@ def test_send_message() -> None:
     """Send message should forward the JSON body to the chat client."""
     session_id = _create_authenticated_session()
     mock_client = mock.MagicMock()
-    mock_client.send_message.return_value = SendMessageResponse(
+    mock_client.send_message.return_value = Message(
         message_id="C001:12345.678",
         channel="C001",
+        text="Hello from service",
+        sender="",
         timestamp="12345.678",
-        ok=True,
     )
 
     with mock.patch(
@@ -293,8 +295,9 @@ def test_send_message() -> None:
     assert response.json() == {
         "message_id": "C001:12345.678",
         "channel": "C001",
+        "text": "Hello from service",
+        "sender": "",
         "timestamp": "12345.678",
-        "ok": True,
     }
 
 

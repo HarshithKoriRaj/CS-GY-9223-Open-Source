@@ -24,7 +24,6 @@ from chat_client_adapter.client import (
 from chat_client_api.client import (
     Channel,
     Message,
-    SendMessageResponse,
     _ClientRegistry,
     get_client,
 )
@@ -88,14 +87,15 @@ class FakeGateway:
         session_id: str,
         channel: str,
         text: str,
-    ) -> SendMessageResponse:
+    ) -> Message:
         """Record and echo the message send request."""
         self.sent_messages.append((session_id, channel, text))
-        return SendMessageResponse(
+        return Message(
             message_id=f"{channel}:12345.678",
             channel=channel,
+            text=text,
+            sender="",
             timestamp="12345.678",
-            ok=True,
         )
 
     def get_messages(
@@ -283,7 +283,7 @@ def test_send_message_triggers_lazy_authentication() -> None:
         response = adapter.send_message("C001", "Hello from adapter")
         assert os.environ["CHAT_CLIENT_SERVICE_SESSION_ID"] == "session-123"
 
-    assert response.ok is True
+    assert response.channel == "C001"
     assert gateway.create_calls == 1
     assert gateway.sent_messages == [("session-123", "C001", "Hello from adapter")]
     mock_open.assert_called_once_with(gateway.auth_session.login_url)
@@ -421,7 +421,7 @@ def test_openapi_gateway_maps_generated_responses() -> None:
     assert auth_session.session_id == "session-123"
     assert auth_status.authenticated is True
     assert [ch.name for ch in channels] == ["general"]
-    assert send_response.ok is True
+    assert send_response.channel == "C001"
     assert [msg.text for msg in messages] == ["Hello"]
     assert channel.channel_id == "C001"
 

@@ -9,7 +9,6 @@ from chat_client_api.client import (
     Channel,
     ChatClient,
     Message,
-    SendMessageResponse,
     _ClientRegistry,
     get_client,
     register_client,
@@ -51,12 +50,14 @@ def test_register_client_replaces_previous_factory() -> None:
     call_count = {"n": 0}
 
     class DummyClient(ChatClient):
-        def send_message(
-            self,
-            channel: str,
-            text: str,
-        ) -> SendMessageResponse:
-            return SendMessageResponse(f"{channel}:0", channel, "0", ok=True)
+        def send_message(self, channel_id: str, text: str) -> Message:
+            return Message(
+                message_id=f"{channel_id}:0",
+                channel=channel_id,
+                text=text,
+                sender="",
+                timestamp="0",
+            )
 
         def get_channels(self) -> list[Channel]:
             return []
@@ -66,7 +67,7 @@ def test_register_client_replaces_previous_factory() -> None:
 
         def get_messages(
             self,
-            channel: str,
+            channel_id: str,
             limit: int = 10,
             cursor: str | None = None,
         ) -> list[Message]:

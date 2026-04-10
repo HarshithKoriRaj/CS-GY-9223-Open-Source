@@ -48,7 +48,7 @@ def test_decode_message_id_invalid_format() -> None:
 
 
 def test_send_message_success() -> None:
-    """Test send_message returns SendMessageResponse on success."""
+    """Test send_message returns Message on success."""
     client = SlackClient("test-token")
     mock_response: dict[str, Any] = {
         "ok": True,
@@ -61,14 +61,13 @@ def test_send_message_success() -> None:
         return_value=mock_response,
     ):
         result = client.send_message("C001", "Hello")
-        assert result.ok is True
         assert result.channel == "C001"
         assert result.timestamp == "12345.678"
         assert result.message_id == "C001:12345.678"
 
 
 def test_send_message_failure() -> None:
-    """Test send_message returns ok=False on SlackApiError."""
+    """Test send_message raises ValueError on SlackApiError."""
     from slack_sdk.errors import SlackApiError
     client = SlackClient("test-token")
     with mock.patch.object(
@@ -76,8 +75,8 @@ def test_send_message_failure() -> None:
         "chat_postMessage",
         side_effect=SlackApiError("error", {}),  # type: ignore[no-untyped-call]
     ):
-        result = client.send_message("general", "Hello")
-        assert result.ok is False
+        with pytest.raises(ValueError, match="Failed to send message"):
+            client.send_message("general", "Hello")
 
 
 # ---------------------------------------------------------------------------

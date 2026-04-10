@@ -122,7 +122,6 @@ class TestSlackClientE2E:
             pytest.skip("SLACK_BOT_TOKEN and SLACK_TEST_CHANNEL must both be set")
         slack = SlackClient(token)
         result = slack.send_message(channel, "E2E test from pytest")
-        assert result.ok is True
         assert result.channel == channel
 
 

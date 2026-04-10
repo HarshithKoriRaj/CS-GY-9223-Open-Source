@@ -13,7 +13,6 @@ from chat_client_api.client import (
     Channel,
     ChatClient,
     Message,
-    SendMessageResponse,
     register_client,
 )
 from chat_client_service_api_client.api.default import (
@@ -103,7 +102,7 @@ class ServiceGateway(Protocol):
         session_id: str,
         channel: str,
         text: str,
-    ) -> SendMessageResponse:
+    ) -> Message:
         """Send a message through the authenticated service session."""
 
     def get_messages(
@@ -211,7 +210,7 @@ class OpenAPIServiceGateway:
         session_id: str,
         channel: str,
         text: str,
-    ) -> SendMessageResponse:
+    ) -> Message:
         """Send a message using the generated client."""
         response = self._expect_result(
             send_message_api.sync(
@@ -220,11 +219,12 @@ class OpenAPIServiceGateway:
                 x_session_id=session_id,
             ),
         )
-        return SendMessageResponse(
+        return Message(
             message_id=response.message_id,
             channel=response.channel,
+            text=text,
+            sender="",
             timestamp=response.timestamp,
-            ok=response.ok,
         )
 
     def get_messages(
@@ -354,12 +354,12 @@ class ChatClientServiceAdapter(ChatClient):
         self.session_id = None
         os.environ.pop("CHAT_CLIENT_SERVICE_SESSION_ID", None)
 
-    def send_message(self, channel: str, text: str) -> SendMessageResponse:
+    def send_message(self, channel_id: str, text: str) -> Message:
         """Send a message via the remote chat client service."""
         session_id = self._ensure_authenticated_session_id()
         return self.gateway.send_message(
             session_id=session_id,
-            channel=channel,
+            channel=channel_id,
             text=text,
         )
 

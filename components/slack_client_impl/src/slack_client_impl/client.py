@@ -6,7 +6,6 @@ from chat_client_api.client import (
     Channel,
     ChatClient,
     Message,
-    SendMessageResponse,
     register_client,
 )
 from slack_sdk import WebClient
@@ -45,39 +44,39 @@ class SlackClient(ChatClient):
 
     def send_message(
         self,
-        channel: str,
+        channel_id: str,
         text: str,
-    ) -> SendMessageResponse:
+    ) -> Message:
         """Send a message to a Slack channel.
 
         Args:
-            channel: Channel ID or name
+            channel_id: Channel ID or name
             text: Message text to send
 
         Returns:
-            SendMessageResponse with message details
+            The sent Message object
+
+        Raises:
+            ValueError: If the message could not be sent
 
         """
         try:
             response = self.client.chat_postMessage(
-                channel=channel,
+                channel=channel_id,
                 text=text,
             )
-            return SendMessageResponse(
-                message_id=_encode_message_id(
-                    str(response["channel"]), str(response["ts"]),
-                ),
-                channel=str(response["channel"]),
-                timestamp=str(response["ts"]),
-                ok=bool(response["ok"]),
+            ts = str(response["ts"])
+            ch = str(response["channel"])
+            return Message(
+                message_id=_encode_message_id(ch, ts),
+                channel=ch,
+                text=text,
+                sender="",
+                timestamp=ts,
             )
-        except SlackApiError:
-            return SendMessageResponse(
-                message_id="",
-                channel=channel,
-                timestamp="",
-                ok=False,
-            )
+        except SlackApiError as exc:
+            msg = f"Failed to send message to {channel_id}"
+            raise ValueError(msg) from exc
 
     def get_channels(self) -> list[Channel]:
         """List all Slack channels.
@@ -126,14 +125,14 @@ class SlackClient(ChatClient):
 
     def get_messages(
         self,
-        channel: str,
+        channel_id: str,
         limit: int = 10,
         cursor: str | None = None,
     ) -> list[Message]:
         """Get recent messages from a Slack channel.
 
         Args:
-            channel: Channel ID or name
+            channel_id: Channel ID or name
             limit: Maximum number of messages
             cursor: Pagination cursor
 
@@ -144,19 +143,19 @@ class SlackClient(ChatClient):
         try:
             if cursor:
                 response = self.client.conversations_history(
-                    channel=channel,
+                    channel=channel_id,
                     limit=limit,
                     cursor=cursor,
                 )
             else:
                 response = self.client.conversations_history(
-                    channel=channel,
+                    channel=channel_id,
                     limit=limit,
                 )
             return [
                 Message(
-                    message_id=_encode_message_id(channel, str(msg.get("ts", ""))),
-                    channel=channel,
+                    message_id=_encode_message_id(channel_id, str(msg.get("ts", ""))),
+                    channel=channel_id,
                     text=str(msg.get("text", "")),
                     sender=str(msg.get("user", "unknown")),
                     timestamp=str(msg.get("ts", "")),

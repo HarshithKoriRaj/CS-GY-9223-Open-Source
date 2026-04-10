@@ -10,7 +10,7 @@ from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from chat_client_api.client import Channel, Message, SendMessageResponse
+    from chat_client_api.client import Channel, Message
 
 
 @dataclass(frozen=True)
@@ -154,7 +154,8 @@ class ChannelModel(BaseModel):
 
     channel_id: str
     name: str
-    is_private: bool
+    is_private: bool | None = None
+    channel_type: str | None = None
 
     @classmethod
     def from_dto(cls, channel: Channel) -> ChannelModel:
@@ -163,6 +164,7 @@ class ChannelModel(BaseModel):
             channel_id=channel.channel_id,
             name=channel.name,
             is_private=channel.is_private,
+            channel_type=channel.channel_type,
         )
 
 
@@ -177,7 +179,8 @@ class GetChannelResponse(BaseModel):
 
     channel_id: str
     name: str
-    is_private: bool
+    is_private: bool | None = None
+    channel_type: str | None = None
 
     @classmethod
     def from_dto(cls, channel: Channel) -> GetChannelResponse:
@@ -186,6 +189,7 @@ class GetChannelResponse(BaseModel):
             channel_id=channel.channel_id,
             name=channel.name,
             is_private=channel.is_private,
+            channel_type=channel.channel_type,
         )
 
 
@@ -194,25 +198,6 @@ class SendMessageRequest(BaseModel):
 
     channel: str = Field(min_length=1)
     text: str = Field(min_length=1)
-
-
-class SendMessageResponseModel(BaseModel):
-    """Send message response model."""
-
-    message_id: str
-    channel: str
-    timestamp: str
-    ok: bool
-
-    @classmethod
-    def from_dto(cls, response: SendMessageResponse) -> SendMessageResponseModel:
-        """Convert a send-message DTO into an API response model."""
-        return cls(
-            message_id=response.message_id,
-            channel=response.channel,
-            timestamp=response.timestamp,
-            ok=response.ok,
-        )
 
 
 class MessageModel(BaseModel):

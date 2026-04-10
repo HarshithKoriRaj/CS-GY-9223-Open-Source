@@ -22,32 +22,26 @@ class Channel:
 
     channel_id: str
     name: str
-    is_private: bool
-
-
-@dataclass
-class SendMessageResponse:
-    """Response from sending a message."""
-
-    message_id: str
-    channel: str
-    timestamp: str
-    ok: bool
+    is_private: bool | None = None
+    channel_type: str | None = None
 
 
 class ChatClient(ABC):
     """Abstract base class for chat client implementations."""
 
     @abstractmethod
-    def send_message(self, channel: str, text: str) -> SendMessageResponse:
+    def send_message(self, channel_id: str, text: str) -> Message:
         """Send a message to a channel.
 
         Args:
-            channel: Channel ID or name
+            channel_id: Channel ID or name
             text: Message text to send
 
         Returns:
-            SendMessageResponse with message details
+            The sent Message object
+
+        Raises:
+            ValueError: If the message could not be sent
 
         """
 
@@ -78,16 +72,17 @@ class ChatClient(ABC):
     @abstractmethod
     def get_messages(
         self,
-        channel: str,
+        channel_id: str,
         limit: int = 10,
         cursor: str | None = None,
     ) -> list[Message]:
         """Get recent messages from a channel.
 
         Args:
-            channel: Channel ID or name
+            channel_id: Channel ID or name
             limit: Maximum number of messages to retrieve
-            cursor: Pagination cursor for fetching next set of messages
+            cursor: Optional pagination cursor. Implementations that do not
+                support cursor-based pagination may ignore this parameter.
 
         Returns:
             List of Message objects
@@ -96,10 +91,11 @@ class ChatClient(ABC):
 
     @abstractmethod
     def get_message(self, message_id: str) -> Message:
-        """Get a single message by ID.
+        """Get a single message by its opaque ID.
 
         Args:
-            message_id: The message ID (format: channel_id:timestamp)
+            message_id: Opaque message identifier. Format is
+                implementation-defined.
 
         Returns:
             Message object
@@ -111,10 +107,11 @@ class ChatClient(ABC):
 
     @abstractmethod
     def delete_message(self, message_id: str) -> None:
-        """Delete a message by ID.
+        """Delete a message by its opaque ID.
 
         Args:
-            message_id: The message ID (format: channel_id:timestamp)
+            message_id: Opaque message identifier. Format is
+                implementation-defined.
 
         Raises:
             ValueError: If message cannot be deleted
