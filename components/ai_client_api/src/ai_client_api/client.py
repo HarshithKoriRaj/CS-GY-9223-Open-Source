@@ -1,9 +1,13 @@
 """Abstract interface for AI clients."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @dataclass
@@ -13,6 +17,7 @@ class AiTool:
     name: str
     description: str
     parameters: dict[str, Any] = field(default_factory=dict)
+    handler: Callable[..., str] | None = field(default=None, repr=False, compare=False)
 
 
 class AiClient(ABC):

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from chat_client_api.client import Channel, Message
+    from ticket_client_api.client import Ticket
 
 
 @dataclass(frozen=True)
@@ -255,3 +256,28 @@ class AiChatResponse(BaseModel):
     """AI chat response model."""
 
     reply: str
+
+
+class TicketModel(BaseModel):
+    """Serialized ticket from the issue tracker vertical."""
+
+    ticket_id: str
+    title: str
+    status: str
+    description: str
+
+    @classmethod
+    def from_dto(cls, ticket: Ticket) -> TicketModel:
+        """Convert a Ticket DTO to an API model."""
+        return cls(
+            ticket_id=ticket.ticket_id,
+            title=ticket.title,
+            status=ticket.status,
+            description=ticket.description,
+        )
+
+
+class ListTicketsResponse(BaseModel):
+    """Response model for listing tickets from the issue tracker vertical."""
+
+    tickets: list[TicketModel]

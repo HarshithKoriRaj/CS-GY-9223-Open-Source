@@ -6,7 +6,8 @@ dependencies = [
     "fastapi>=0.135.1",
     "slack-sdk>=3.40.0",
     "uvicorn>=0.42.0",
-    "anthropic>=0.40.0",
+    "openai>=1.0.0",
+    "httpx>=0.27.0",
 ]
 
 [dependency-groups]
@@ -28,7 +29,9 @@ members = [
     "components/chat_client_service",
     "components/chat_client_service_api_client",
     "components/ai_client_api",
-    "components/claude_ai_client_impl",
+    "components/openai_ai_client_impl",
+    "components/ticket_client_api",
+    "components/http_ticket_client_impl",
 ]
 
 [tool.uv.sources]
@@ -38,7 +41,9 @@ slack-client-impl = { workspace = true }
 chat-client-service = { workspace = true }
 chat-client-service-api-client = { workspace = true }
 ai-client-api = { workspace = true }
-claude-ai-client-impl = { workspace = true }
+openai-ai-client-impl = { workspace = true }
+ticket-client-api = { workspace = true }
+http-ticket-client-impl = { workspace = true }
 
 [tool.ruff]
 line-length = 88
@@ -90,7 +95,9 @@ testpaths = [
     "components/slack_client_impl/tests",
     "components/chat_client_service/tests",
     "components/ai_client_api/tests",
-    "components/claude_ai_client_impl/tests",
+    "components/openai_ai_client_impl/tests",
+    "components/ticket_client_api/tests",
+    "components/http_ticket_client_impl/tests",
 ]
 python_files = "test_*.py"
 

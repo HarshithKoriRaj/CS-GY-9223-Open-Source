@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import secrets
 import time
@@ -37,11 +38,13 @@ from .models import (
     HealthResponse,
     InMemoryAuthSessionStore,
     ListChannelsResponse,
+    ListTicketsResponse,
     LogoutResponse,
     MessageModel,
     MetricsSnapshot,
     SendMessageRequest,
     ServiceSettings,
+    TicketModel,
 )
 
 TokenClientFactory = Callable[[str], ChatClient]
@@ -480,35 +483,45 @@ def ai_chat(
     """Send a natural-language prompt to the AI assistant.
 
     The assistant has access to chat domain tools (list channels, send
-    messages, fetch history) so it can take actions on your behalf.
+    messages, fetch history) so it can take real actions on your behalf.
     """
-    del client  # AI client handles domain actions via tool calling
-
     tools = [
         AiTool(
             name="get_channels",
             description="List all available Slack channels",
             parameters={},
+            handler=lambda: json.dumps([
+                {"channel_id": c.channel_id, "name": c.name}
+                for c in client.get_channels()
+            ]),
         ),
         AiTool(
             name="send_message",
             description="Send a text message to a Slack channel",
             parameters={
-                "channel": {"type": "string", "description": "Channel ID"},
+                "channel_id": {"type": "string", "description": "Channel ID"},
                 "text": {"type": "string", "description": "Message text"},
             },
+            handler=lambda channel_id, text: json.dumps({
+                "message_id": client.send_message(
+                    channel_id=channel_id, text=text,
+                ).message_id,
+            }),
         ),
         AiTool(
             name="get_messages",
             description="Fetch recent messages from a Slack channel",
             parameters={
-                "channel": {"type": "string", "description": "Channel ID"},
+                "channel_id": {"type": "string", "description": "Channel ID"},
                 "limit": {
                     "type": "integer",
-                    "description": "Max messages to fetch",
-                    "default": 10,
+                    "description": "Max messages to fetch (default 10)",
                 },
             },
+            handler=lambda channel_id, limit=10: json.dumps([
+                {"text": m.text, "sender": m.sender, "timestamp": m.timestamp}
+                for m in client.get_messages(channel_id=channel_id, limit=limit)
+            ]),
         ),
     ]
 
@@ -529,6 +542,34 @@ def ai_chat(
         ) from exc
 
     return AiChatResponse(reply=reply)
+
+
+@app.get("/tickets", response_model=ListTicketsResponse)
+def list_tickets(
+    ticket_status: Annotated[str, Query()] = "open",
+) -> ListTicketsResponse:
+    """Fetch open tickets from the issue tracker vertical.
+
+    Reads TICKET_SERVICE_BASE_URL from the environment to locate the
+    external ticket service (provided by Teams 1, 3, or 7).
+    """
+    from http_ticket_client_impl.client import HttpTicketClient
+
+    ticket_base_url = os.getenv("TICKET_SERVICE_BASE_URL")
+    if not ticket_base_url:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="TICKET_SERVICE_BASE_URL is not configured",
+        )
+    ticket_client = HttpTicketClient(ticket_base_url)
+    try:
+        tickets = ticket_client.get_tickets(status=ticket_status)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    return ListTicketsResponse(tickets=[TicketModel.from_dto(t) for t in tickets])
 
 
 def create_app() -> FastAPI:
