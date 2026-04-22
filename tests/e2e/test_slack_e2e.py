@@ -85,6 +85,40 @@ class TestLiveServiceEndpoints:
         )
         assert response.status_code == HTTP_401_UNAUTHORIZED
 
+    def test_metrics_endpoint_returns_telemetry(self) -> None:
+        """Metrics endpoint should return all required telemetry fields."""
+        response = httpx.get(f"{LIVE_SERVICE_URL}/metrics", timeout=60)
+        if response.status_code == HTTP_404_NOT_FOUND:
+            pytest.skip("Endpoint not deployed yet")
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert "total_requests" in data
+        assert "success_rate" in data
+        assert "failure_rate" in data
+        assert "average_latency_ms" in data
+
+    def test_prometheus_metrics_endpoint(self) -> None:
+        """Prometheus metrics endpoint should return text exposition format."""
+        response = httpx.get(
+            f"{LIVE_SERVICE_URL}/metrics/prometheus", timeout=60,
+        )
+        if response.status_code == HTTP_404_NOT_FOUND:
+            pytest.skip("Endpoint not deployed yet")
+        assert response.status_code == HTTP_200_OK
+        assert "text/plain" in response.headers.get("content-type", "")
+        assert "chat_requests_total" in response.text
+
+    def test_dashboard_endpoint_serves_html(self) -> None:
+        """Dashboard endpoint should return an HTML telemetry page."""
+        response = httpx.get(
+            f"{LIVE_SERVICE_URL}/dashboard", timeout=60,
+        )
+        if response.status_code == HTTP_404_NOT_FOUND:
+            pytest.skip("Endpoint not deployed yet")
+        assert response.status_code == HTTP_200_OK
+        assert "text/html" in response.headers.get("content-type", "")
+        assert "Telemetry Dashboard" in response.text
+
 
 class TestSlackClientE2E:
     """Tests against the real Slack API using the local slack_client_impl.

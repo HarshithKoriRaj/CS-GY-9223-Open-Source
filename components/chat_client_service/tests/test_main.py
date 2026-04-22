@@ -67,6 +67,29 @@ def test_metrics_initial_state() -> None:
     assert "average_latency_ms" in data
 
 
+def test_metrics_prometheus_format() -> None:
+    """Prometheus endpoint should return text/plain with metric lines."""
+    response = client.get("/metrics/prometheus")
+    assert response.status_code == HTTP_200_OK
+    assert "text/plain" in response.headers["content-type"]
+    body = response.text
+    assert "chat_requests_total" in body
+    assert "chat_requests_success" in body
+    assert "chat_requests_failed" in body
+    assert "chat_success_rate" in body
+    assert "chat_failure_rate" in body
+    assert "chat_avg_latency_ms" in body
+
+
+def test_dashboard_returns_html() -> None:
+    """Dashboard endpoint should return an HTML page."""
+    response = client.get("/dashboard")
+    assert response.status_code == HTTP_200_OK
+    assert "text/html" in response.headers["content-type"]
+    assert "Telemetry Dashboard" in response.text
+    assert "/metrics" in response.text
+
+
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------

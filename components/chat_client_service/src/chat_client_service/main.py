@@ -229,6 +229,111 @@ def _get_authenticated_client(
     return build_chat_client(slack_bot_token)
 
 
+def _build_metrics_snapshot() -> MetricsSnapshot:
+    """Build a MetricsSnapshot from the in-process counters."""
+    total = _metrics["total_requests"]
+    success = _metrics["successful_requests"]
+    failed = _metrics["failed_requests"]
+    avg_latency = _metrics["total_latency_ms"] / total if total > 0 else 0.0
+    return MetricsSnapshot(
+        total_requests=int(total),
+        successful_requests=int(success),
+        failed_requests=int(failed),
+        success_rate=round(success / total, 4) if total > 0 else 0.0,
+        failure_rate=round(failed / total, 4) if total > 0 else 0.0,
+        average_latency_ms=round(avg_latency, 2),
+    )
+
+
+_DASHBOARD_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Chat Client Service — Telemetry Dashboard</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,sans-serif;background:#0f172a;
+       color:#e2e8f0;padding:2rem}
+  h1{font-size:1.5rem;margin-bottom:1.5rem;color:#38bdf8}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+        gap:1rem;margin-bottom:2rem}
+  .card{background:#1e293b;border-radius:12px;padding:1.25rem;
+        border:1px solid #334155}
+  .card .label{font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;
+               color:#94a3b8;margin-bottom:.25rem}
+  .card .value{font-size:2rem;font-weight:700}
+  .ok{color:#4ade80} .warn{color:#facc15} .err{color:#f87171}
+  .bar-wrap{background:#334155;border-radius:6px;height:18px;overflow:hidden;
+            margin-top:.5rem;display:flex}
+  .bar-ok{background:#4ade80;height:100%}
+  .bar-err{background:#f87171;height:100%}
+  footer{margin-top:2rem;font-size:.75rem;color:#64748b;text-align:center}
+  #updated{font-size:.75rem;color:#64748b;margin-bottom:1rem}
+</style>
+</head>
+<body>
+<h1>Telemetry Dashboard</h1>
+<p id="updated">loading…</p>
+<div class="grid">
+  <div class="card">
+    <div class="label">Total Requests</div>
+    <div class="value" id="total">—</div>
+  </div>
+  <div class="card">
+    <div class="label">Successful</div>
+    <div class="value ok" id="success">—</div>
+  </div>
+  <div class="card">
+    <div class="label">Failed</div>
+    <div class="value err" id="failed">—</div>
+  </div>
+  <div class="card">
+    <div class="label">Success Rate</div>
+    <div class="value ok" id="srate">—</div>
+    <div class="bar-wrap"><div class="bar-ok" id="sbar"></div>
+    <div class="bar-err" id="fbar"></div></div>
+  </div>
+  <div class="card">
+    <div class="label">Failure Rate</div>
+    <div class="value err" id="frate">—</div>
+  </div>
+  <div class="card">
+    <div class="label">Avg Latency</div>
+    <div class="value warn" id="latency">—</div>
+  </div>
+</div>
+<footer>OSPSD Team 9 — Chat Client Service &middot; auto-refreshes every 5 s</footer>
+<script>
+const $=id=>document.getElementById(id);
+async function refresh(){
+  try{
+    const r=await fetch('/metrics');
+    const d=await r.json();
+    $('total').textContent=d.total_requests;
+    $('success').textContent=d.successful_requests;
+    $('failed').textContent=d.failed_requests;
+    const sr=(d.success_rate*100).toFixed(1);
+    const fr=(d.failure_rate*100).toFixed(1);
+    $('srate').textContent=sr+'%';
+    $('frate').textContent=fr+'%';
+    const lat=d.average_latency_ms.toFixed(1);
+    $('latency').textContent=lat+' ms';
+    $('sbar').style.width=sr+'%';
+    $('fbar').style.width=fr+'%';
+    const t=new Date().toLocaleTimeString();
+    $('updated').textContent='Updated: '+t;
+  }catch(e){$('updated').textContent='Error';}
+}
+refresh();
+setInterval(refresh,5000);
+</script>
+</body>
+</html>
+"""
+
+
 # ---------------------------------------------------------------------------
 # Health & Metrics
 # ---------------------------------------------------------------------------
@@ -243,18 +348,45 @@ def health() -> HealthResponse:
 @app.get("/metrics", response_model=MetricsSnapshot)
 def metrics() -> MetricsSnapshot:
     """Return current telemetry snapshot."""
-    total = _metrics["total_requests"]
-    success = _metrics["successful_requests"]
-    failed = _metrics["failed_requests"]
-    avg_latency = _metrics["total_latency_ms"] / total if total > 0 else 0.0
-    return MetricsSnapshot(
-        total_requests=int(total),
-        successful_requests=int(success),
-        failed_requests=int(failed),
-        success_rate=round(success / total, 4) if total > 0 else 0.0,
-        failure_rate=round(failed / total, 4) if total > 0 else 0.0,
-        average_latency_ms=round(avg_latency, 2),
+    return _build_metrics_snapshot()
+
+
+@app.get("/metrics/prometheus")
+def metrics_prometheus() -> Response:
+    """Expose telemetry in Prometheus text format for external scrapers."""
+    snap = _build_metrics_snapshot()
+    lines = [
+        "# HELP chat_requests_total Total HTTP requests handled.",
+        "# TYPE chat_requests_total counter",
+        f"chat_requests_total {snap.total_requests}",
+        "# HELP chat_requests_success Successful HTTP requests.",
+        "# TYPE chat_requests_success counter",
+        f"chat_requests_success {snap.successful_requests}",
+        "# HELP chat_requests_failed Failed HTTP requests.",
+        "# TYPE chat_requests_failed counter",
+        f"chat_requests_failed {snap.failed_requests}",
+        "# HELP chat_success_rate Ratio of successful to total requests.",
+        "# TYPE chat_success_rate gauge",
+        f"chat_success_rate {snap.success_rate}",
+        "# HELP chat_failure_rate Ratio of failed to total requests.",
+        "# TYPE chat_failure_rate gauge",
+        f"chat_failure_rate {snap.failure_rate}",
+        "# HELP chat_avg_latency_ms Average request latency in ms.",
+        "# TYPE chat_avg_latency_ms gauge",
+        f"chat_avg_latency_ms {snap.average_latency_ms}",
+        "",
+    ]
+    return Response(
+        content="\n".join(lines),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
     )
+
+
+@app.get("/dashboard")
+def dashboard() -> Response:
+    """Serve an HTML telemetry dashboard that auto-refreshes metrics."""
+    html = _DASHBOARD_HTML
+    return Response(content=html, media_type="text/html")
 
 
 # ---------------------------------------------------------------------------
