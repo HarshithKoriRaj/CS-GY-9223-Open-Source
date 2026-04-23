@@ -680,10 +680,10 @@ def ai_chat(
 def list_tickets(
     ticket_status: Annotated[str, Query()] = "open",
 ) -> ListTicketsResponse:
-    """Fetch open tickets from the issue tracker vertical.
+    """Fetch open tickets from Team 3's Trello-based issue tracker.
 
-    Reads TICKET_SERVICE_BASE_URL from the environment to locate the
-    external ticket service (provided by Teams 1, 3, or 7).
+    Reads TICKET_SERVICE_BASE_URL and TICKET_BOARD_ID from the
+    environment to locate the external ticket service.
     """
     from http_ticket_client_impl.client import HttpTicketClient
 
@@ -693,7 +693,8 @@ def list_tickets(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="TICKET_SERVICE_BASE_URL is not configured",
         )
-    ticket_client = HttpTicketClient(ticket_base_url)
+    board_id = os.getenv("TICKET_BOARD_ID", "")
+    ticket_client = HttpTicketClient(ticket_base_url, board_id=board_id)
     try:
         tickets = ticket_client.get_tickets(status=ticket_status)
     except ValueError as exc:
@@ -701,7 +702,9 @@ def list_tickets(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
         ) from exc
-    return ListTicketsResponse(tickets=[TicketModel.from_dto(t) for t in tickets])
+    return ListTicketsResponse(
+        tickets=[TicketModel.from_dto(t) for t in tickets],
+    )
 
 
 def create_app() -> FastAPI:

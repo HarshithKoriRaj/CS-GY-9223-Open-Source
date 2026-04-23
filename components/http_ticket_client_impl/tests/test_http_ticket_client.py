@@ -1,4 +1,5 @@
-"""Unit tests for the HTTP ticket client implementation."""
+"""Unit tests for the HTTP ticket client (Team 3 Trello adapter)."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -8,6 +9,8 @@ import httpx
 import pytest
 from http_ticket_client_impl.client import HttpTicketClient
 from ticket_client_api.client import Ticket
+
+BOARD = "abc123"
 
 
 def _make_response(
@@ -29,30 +32,44 @@ def _make_response(
 
 
 def test_get_tickets_success() -> None:
-    """get_tickets should return a list of Ticket objects on success."""
-    client = HttpTicketClient("http://tickets.local")
+    """get_tickets should map Team 3's IssueOut to Ticket objects."""
+    client = HttpTicketClient("http://tickets.local", board_id=BOARD)
     fake_resp = _make_response(
-        json_data={
-            "tickets": [
-                {
-                    "ticket_id": "T1",
-                    "title": "Bug",
-                    "status": "open",
-                    "description": "desc",
-                },
-            ],
-        },
+        json_data=[
+            {"id": 1, "title": "Bug", "state": "open", "body": "desc"},
+            {"id": 2, "title": "Feat", "state": "closed", "body": "x"},
+        ],
     )
-    with mock.patch("httpx.get", return_value=fake_resp):
+    with mock.patch("httpx.get", return_value=fake_resp) as mock_get:
         tickets = client.get_tickets()
+
+    mock_get.assert_called_once_with(
+        f"http://tickets.local/boards/{BOARD}/issues",
+        timeout=15.0,
+    )
     assert len(tickets) == 1
     assert isinstance(tickets[0], Ticket)
-    assert tickets[0].ticket_id == "T1"
+    assert tickets[0].ticket_id == "1"
+    assert tickets[0].status == "open"
+    assert tickets[0].description == "desc"
+
+
+def test_get_tickets_no_filter() -> None:
+    """get_tickets with empty status should return all issues."""
+    client = HttpTicketClient("http://tickets.local", board_id=BOARD)
+    issue_list = [
+        {"id": 1, "title": "A", "state": "open", "body": ""},
+        {"id": 2, "title": "B", "state": "closed", "body": ""},
+    ]
+    fake_resp = _make_response(json_data=issue_list)
+    with mock.patch("httpx.get", return_value=fake_resp):
+        tickets = client.get_tickets(status="")
+    assert len(tickets) == len(issue_list)
 
 
 def test_get_tickets_failure_raises() -> None:
     """get_tickets should raise ValueError on HTTP error."""
-    client = HttpTicketClient("http://tickets.local")
+    client = HttpTicketClient("http://tickets.local", board_id=BOARD)
     fake_resp = _make_response(raise_error=True)
     with mock.patch("httpx.get", return_value=fake_resp):
         with pytest.raises(ValueError, match="Failed to fetch tickets"):
@@ -60,49 +77,51 @@ def test_get_tickets_failure_raises() -> None:
 
 
 def test_get_ticket_success() -> None:
-    """get_ticket should return a single Ticket."""
-    client = HttpTicketClient("http://tickets.local")
+    """get_ticket should map a single IssueOut to a Ticket."""
+    client = HttpTicketClient("http://tickets.local", board_id=BOARD)
     fake_resp = _make_response(
-        json_data={
-            "ticket_id": "T1",
-            "title": "Bug",
-            "status": "open",
-            "description": "d",
-        },
+        json_data={"id": 1, "title": "Bug", "state": "open", "body": "d"},
     )
-    with mock.patch("httpx.get", return_value=fake_resp):
-        ticket = client.get_ticket("T1")
-    assert ticket.ticket_id == "T1"
+    with mock.patch("httpx.get", return_value=fake_resp) as mock_get:
+        ticket = client.get_ticket("1")
+
+    mock_get.assert_called_once_with(
+        f"http://tickets.local/boards/{BOARD}/issues/1",
+        timeout=15.0,
+    )
+    assert ticket.ticket_id == "1"
+    assert ticket.description == "d"
 
 
 def test_get_ticket_not_found_raises() -> None:
     """get_ticket should raise ValueError on HTTP error."""
-    client = HttpTicketClient("http://tickets.local")
+    client = HttpTicketClient("http://tickets.local", board_id=BOARD)
     fake_resp = _make_response(raise_error=True)
     with mock.patch("httpx.get", return_value=fake_resp):
         with pytest.raises(ValueError, match="Ticket not found"):
-            client.get_ticket("T999")
+            client.get_ticket("999")
 
 
 def test_create_ticket_success() -> None:
-    """create_ticket should return the created Ticket."""
-    client = HttpTicketClient("http://tickets.local")
+    """create_ticket should POST with title and body, return Ticket."""
+    client = HttpTicketClient("http://tickets.local", board_id=BOARD)
     fake_resp = _make_response(
-        json_data={
-            "ticket_id": "T2",
-            "title": "New",
-            "status": "open",
-            "description": "d",
-        },
+        json_data={"id": 5, "title": "New", "state": "open", "body": "d"},
     )
-    with mock.patch("httpx.post", return_value=fake_resp):
+    with mock.patch("httpx.post", return_value=fake_resp) as mock_post:
         ticket = client.create_ticket("New", "d")
-    assert ticket.ticket_id == "T2"
+
+    mock_post.assert_called_once_with(
+        f"http://tickets.local/boards/{BOARD}/issues",
+        json={"title": "New", "body": "d"},
+        timeout=15.0,
+    )
+    assert ticket.ticket_id == "5"
 
 
 def test_create_ticket_failure_raises() -> None:
     """create_ticket should raise ValueError on HTTP error."""
-    client = HttpTicketClient("http://tickets.local")
+    client = HttpTicketClient("http://tickets.local", board_id=BOARD)
     fake_resp = _make_response(raise_error=True)
     with mock.patch("httpx.post", return_value=fake_resp):
         with pytest.raises(ValueError, match="Failed to create ticket"):
@@ -110,17 +129,22 @@ def test_create_ticket_failure_raises() -> None:
 
 
 def test_update_ticket_status_success() -> None:
-    """update_ticket_status should complete without error."""
-    client = HttpTicketClient("http://tickets.local")
-    fake_resp = _make_response()
-    with mock.patch("httpx.patch", return_value=fake_resp):
-        client.update_ticket_status("T1", "done")
+    """update_ticket_status should POST to the close endpoint."""
+    client = HttpTicketClient("http://tickets.local", board_id=BOARD)
+    fake_resp = _make_response(json_data={"success": True})
+    with mock.patch("httpx.post", return_value=fake_resp) as mock_post:
+        client.update_ticket_status("1", "closed")
+
+    mock_post.assert_called_once_with(
+        f"http://tickets.local/boards/{BOARD}/issues/1/close",
+        timeout=15.0,
+    )
 
 
 def test_update_ticket_status_failure_raises() -> None:
     """update_ticket_status should raise ValueError on HTTP error."""
-    client = HttpTicketClient("http://tickets.local")
+    client = HttpTicketClient("http://tickets.local", board_id=BOARD)
     fake_resp = _make_response(raise_error=True)
-    with mock.patch("httpx.patch", return_value=fake_resp):
+    with mock.patch("httpx.post", return_value=fake_resp):
         with pytest.raises(ValueError, match="Failed to update ticket"):
-            client.update_ticket_status("T1", "done")
+            client.update_ticket_status("1", "closed")

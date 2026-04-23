@@ -24,23 +24,27 @@ def _reset() -> None:
 
 def test_list_tickets_without_env_returns_503() -> None:
     """GET /tickets should return 503 when TICKET_SERVICE_BASE_URL is not set."""
-    with mock.patch.dict(os.environ, {}, clear=True):
+    with mock.patch.dict(
+        os.environ,
+        {"TICKET_SERVICE_BASE_URL": ""},
+        clear=True,
+    ):
         client = TestClient(app, raise_server_exceptions=False)
         response = client.get("/tickets")
     assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
 
 
 def test_list_tickets_success() -> None:
-    """GET /tickets should return tickets from the external service."""
+    """GET /tickets should return tickets from Team 3's service."""
     fake_tickets = [
         Ticket(
-            ticket_id="T1",
+            ticket_id="1",
             title="Fix login bug",
             status="open",
             description="Login fails",
         ),
         Ticket(
-            ticket_id="T2",
+            ticket_id="2",
             title="Add dark mode",
             status="open",
             description="Feature request",
@@ -49,7 +53,10 @@ def test_list_tickets_success() -> None:
     with (
         mock.patch.dict(
             os.environ,
-            {"TICKET_SERVICE_BASE_URL": "http://tickets.local"},
+            {
+                "TICKET_SERVICE_BASE_URL": "http://tickets.local",
+                "TICKET_BOARD_ID": "board123",
+            },
             clear=False,
         ),
         mock.patch(
@@ -63,7 +70,7 @@ def test_list_tickets_success() -> None:
     assert response.status_code == HTTPStatus.OK
     data = response.json()
     assert len(data["tickets"]) == len(fake_tickets)
-    assert data["tickets"][0]["ticket_id"] == "T1"
+    assert data["tickets"][0]["ticket_id"] == "1"
     assert data["tickets"][1]["title"] == "Add dark mode"
 
 
@@ -73,7 +80,10 @@ def test_list_tickets_with_status_filter() -> None:
     with (
         mock.patch.dict(
             os.environ,
-            {"TICKET_SERVICE_BASE_URL": "http://tickets.local"},
+            {
+                "TICKET_SERVICE_BASE_URL": "http://tickets.local",
+                "TICKET_BOARD_ID": "board123",
+            },
             clear=False,
         ),
         mock.patch(
@@ -88,16 +98,21 @@ def test_list_tickets_with_status_filter() -> None:
 
 
 def test_list_tickets_service_error_returns_502() -> None:
-    """GET /tickets should return 502 when the ticket service is unreachable."""
+    """GET /tickets should return 502 when Team 3's service is unreachable."""
     with (
         mock.patch.dict(
             os.environ,
-            {"TICKET_SERVICE_BASE_URL": "http://tickets.local"},
+            {
+                "TICKET_SERVICE_BASE_URL": "http://tickets.local",
+                "TICKET_BOARD_ID": "board123",
+            },
             clear=False,
         ),
         mock.patch(
             "http_ticket_client_impl.client.HttpTicketClient.get_tickets",
-            side_effect=ValueError("Failed to fetch tickets: connection refused"),
+            side_effect=ValueError(
+                "Failed to fetch tickets: connection refused",
+            ),
         ),
     ):
         client = TestClient(app, raise_server_exceptions=False)

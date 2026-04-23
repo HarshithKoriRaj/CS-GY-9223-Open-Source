@@ -30,10 +30,14 @@ resource "render_web_service" "chat_client_service" {
   auto_deploy  = true
 
   env_vars = {
-    "SLACK_SCOPES"  = { value = var.slack_scopes }
-    "OPENAI_MODEL"  = { value = var.openai_model }
-    "ENV"           = { value = "production" }
+    "SLACK_SCOPES"    = { value = var.slack_scopes }
+    "OPENAI_MODEL"    = { value = var.openai_model }
+    "ENV"             = { value = "production" }
   }
+
+  # Secrets must be set manually in the Render dashboard:
+  # SLACK_CLIENT_ID, SLACK_CLIENT_SECRET, SLACK_REDIRECT_URI,
+  # OPENAI_API_KEY, TICKET_SERVICE_BASE_URL, TICKET_BOARD_ID
 
   secret_files = {}
 }

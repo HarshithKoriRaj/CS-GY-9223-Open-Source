@@ -65,18 +65,29 @@ class SlackClient(ChatClient):
                 channel=channel_id,
                 text=text,
             )
-            ts = str(response["ts"])
-            ch = str(response["channel"])
-            return Message(
-                message_id=_encode_message_id(ch, ts),
-                channel=ch,
-                text=text,
-                sender="",
-                timestamp=ts,
-            )
         except SlackApiError as exc:
-            msg = f"Failed to send message to {channel_id}"
+            error = exc.response.get("error", "unknown") if exc.response else "unknown"
+            msg = f"Failed to send message to {channel_id}: {error}"
             raise ValueError(msg) from exc
+
+        if not response.get("ok"):
+            error = response.get("error", "unknown_error")
+            msg = f"Slack API error sending to {channel_id}: {error}"
+            raise ValueError(msg)
+
+        ts = str(response.get("ts", ""))
+        ch = str(response.get("channel", channel_id))
+        if not ts:
+            msg = f"Slack returned ok but no timestamp for {channel_id}"
+            raise ValueError(msg)
+
+        return Message(
+            message_id=_encode_message_id(ch, ts),
+            channel=ch,
+            text=text,
+            sender="",
+            timestamp=ts,
+        )
 
     def get_channels(self) -> list[Channel]:
         """List all Slack channels.

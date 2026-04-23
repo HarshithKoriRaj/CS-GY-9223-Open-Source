@@ -28,5 +28,7 @@ services:
         value: "gpt-4o-mini"
       - key: TICKET_SERVICE_BASE_URL
         sync: false
+      - key: TICKET_BOARD_ID
+        sync: false
       - key: ENV
         value: production
