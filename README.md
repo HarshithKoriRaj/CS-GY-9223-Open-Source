@@ -70,8 +70,6 @@ The Chat Client Service is deployed as a public FastAPI web service on **Render*
 - OpenAPI Spec: https://os-bmaq.onrender.com/openapi.json
 - Swagger Docs: https://os-bmaq.onrender.com/docs
 - Health Check: https://os-bmaq.onrender.com/health
-- Telemetry Dashboard: https://os-bmaq.onrender.com/dashboard
-- Metrics: https://os-bmaq.onrender.com/metrics
 
 ### Platform Configuration
 
@@ -95,5 +93,3 @@ The service emits telemetry data including:
 - Request latency per endpoint
 - Success rate
 - Failure rate
-
-Visualized via the dashboard at https://os-bmaq.onrender.com/dashboard
