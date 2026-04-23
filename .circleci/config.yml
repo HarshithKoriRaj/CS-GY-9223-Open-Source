@@ -63,4 +63,4 @@ workflows:
             branches:
               only:
                 - main
-                - feat/hw3
+                - HW3
