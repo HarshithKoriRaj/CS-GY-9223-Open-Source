@@ -74,12 +74,12 @@ The Chat Client Service is deployed as a public FastAPI web service on **Render*
 ### Platform Configuration
 
 - Platform: Render (Web Service)
-- Branch: `feat/hw3`
+- Branch: `HW3`
 - Infrastructure: Managed via Terraform in `terraform/`
 
 ### CI/CD Pipeline
 
-CircleCI is configured in [.circleci/config.yml](.circleci/config.yml). Every push to `feat/hw3` triggers:
+CircleCI is configured in [.circleci/config.yml](.circleci/config.yml). Every push to `HW3` triggers:
 
 1. `uv sync --all-packages`
 2. `ruff check .`
