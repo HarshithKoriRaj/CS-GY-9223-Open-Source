@@ -1,37 +1,27 @@
 # Slack Client Implementation
 
-Slack implementation of the ChatClient interface.
+This component is the direct Slack-backed `ChatClient` implementation used for local execution.
 
 ## Setup
 
-Set the `SLACK_BOT_TOKEN` environment variable:
 ```bash
-export SLACK_BOT_TOKEN=xoxb-your-token-here
+export SLACK_BOT_TOKEN="xoxb-your-token"
 ```
 
 ## Usage
+
 ```python
 import slack_client_impl
 from chat_client_api import get_client
 
-# Import registers the implementation via dependency injection
 client = get_client()
-
-# Currently raises NotImplementedError (HW1 scaffold)
-# response = client.send_message("general", "Hello from Slack!")
-# channels = client.list_channels()
-# messages = client.get_messages("general", limit=10, cursor=None)
+channels = client.list_channels()
 ```
 
-## Features
+## Notes
 
-- Automatic registration via dependency injection
-- Environment-based configuration
-- Full type safety with mypy strict mode
-- Pagination support with cursor parameter
+- Importing the package registers the implementation automatically.
+- The implementation uses the Slack Web API directly through `slack_sdk`.
+- This path is useful for local development and dependency-injection sanity checks.
 
-## Status
-
-This is a scaffold implementation for HW1. Full functionality coming in next iteration.
-
-See the [full documentation](../../docs/components/slack_client_impl.md) for detailed information.
+See [the component docs](../../docs/components/slack_client_impl.md) for more detail.

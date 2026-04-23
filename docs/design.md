@@ -1,56 +1,28 @@
-# Design Document - HW1: Chat Client
+# Design
 
-## Overview
+## Goal
 
-This project implements a modular chat client system using interface-implementation separation and dependency injection.
+Expose the chat client as a standalone service without forcing consumer code to change.
 
-## Architecture
+## Main Decisions
 
-### Components
+- Keep `ChatClient` as the only business-facing contract.
+- Put browser-based Slack OAuth in the FastAPI service.
+- Use a generated OpenAPI client instead of handwritten request code for the adapter.
+- Let the adapter lazily authenticate so the first real operation can bootstrap the remote session.
 
-1. **chat_client_api** (Interface)
-   - Abstract base class defining chat operations
-   - Methods: send_message, list_channels, get_messages
-   - Dependency injection factory: get_client(), register_client()
-   - Pagination support via cursor parameter
+## Session Model
 
-2. **slack_client_impl** (Implementation)
-   - Concrete Slack implementation
-   - Inherits from ChatClient ABC
-   - Auto-registers via dependency injection on import
+The service keeps in-memory auth sessions keyed by service session ID. Each session stores:
 
-### Design Decisions
+- whether OAuth is complete
+- the Slack bot token returned by Slack
+- the optional Slack team name
 
-**Why separate interface from implementation?**
-- Allows swapping chat providers (Slack, Discord, Teams) without changing client code
-- Easier testing with mocks
-- Clear contracts
+This keeps the implementation small enough for the assignment while still supporting a real browser redirect flow.
 
-**Why dependency injection?**
-- Loose coupling between interface and implementation
-- Users code against interface, not concrete class
-- Easy to swap implementations
+## Testing Strategy
 
-**Why ABC (Abstract Base Class)?**
-- Enforces contract at Python level
-- Type checking with mypy
-- Clear documentation of required methods
-
-**Why add cursor parameter for pagination?**
-- Enables fetching next set of messages from where user left off
-- Prevents breaking API changes in future
-- Follows best practices for paginated APIs
-
-## Current Status (HW1)
-
-- Interface: Complete with DTOs and pagination support
-- Implementation: Scaffold (methods raise NotImplementedError)
-- Tests: Integration test for DI, unit tests for interface
-- Coverage: 90% threshold enforced
-
-## Future Work
-
-- Implement actual Slack SDK calls
-- Add OAuth authentication flow
-- Comprehensive unit tests
-- E2E tests with real Slack workspace
+- Unit tests for DTOs, the Slack client, the service routes, and the adapter.
+- Integration test for dependency-injection registration.
+- Optional E2E test for real Slack credentials.
